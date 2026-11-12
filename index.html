@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161A20">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Thriftkollen">
+<title>Thriftkollen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: mobile-first app. Sticky snabbkoll-bar högst upp, flikar under, kortrutnät som blir en kolumn på mobil.
+   Prislappen (gul, med hål) är signaturdetaljen: det är maxpriset du får betala i butiken. */
+:root {
+  --bg: #F2F4F7; --surface: #FFFFFF; --surface-2: #E8ECF1; --ink: #141820; --muted: #5B6573; --line: #D8DEE6;
+  --accent: #1F4FD1; --accent-ink: #FFFFFF; --tag: #FFD84D; --tag-ink: #2A2200;
+  --good: #1D7F47; --good-bg: #DDF3E5; --warn: #9A6410; --warn-bg: #FBEFD6; --bad: #B8322B; --bad-bg: #FBE1DF;
+  --tradera: #C98F00; --blocket: #1F4FD1;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 10px; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1115; --surface: #161A20; --surface-2: #1E242C; --ink: #E8ECF1; --muted: #98A2AF; --line: #2A313B;
+    --accent: #7EA0FF; --accent-ink: #0B1020; --tag: #F2C52E; --tag-ink: #221A00;
+    --good: #4CC583; --good-bg: #12301F; --warn: #E6B055; --warn-bg: #33270F; --bad: #F2766E; --bad-bg: #3A1816;
+    --tradera: #F2C52E; --blocket: #7EA0FF; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1115; --surface: #161A20; --surface-2: #1E242C; --ink: #E8ECF1; --muted: #98A2AF; --line: #2A313B;
+  --accent: #7EA0FF; --accent-ink: #0B1020; --tag: #F2C52E; --tag-ink: #221A00;
+  --good: #4CC583; --good-bg: #12301F; --warn: #E6B055; --warn-bg: #33270F; --bad: #F2766E; --bad-bg: #3A1816;
+  --tradera: #F2C52E; --blocket: #7EA0FF; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: grid; gap: 10px; padding-block: 12px 0; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-stretch: 80%; font-size: 1.6rem; letter-spacing: -0.01em; text-transform: uppercase; }
+.brand h1 span { background: var(--tag); color: var(--tag-ink); padding: 0 .3em; margin-left: .1em; }
+.brand small { color: var(--muted); font-size: .8rem; text-align: right; }
+.quick { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem; gap: 8px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label, .lbl { font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+input[type=text], input[type=number], input[type=search], input[type=date], input[type=password], select, textarea {
+  width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 16px;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav.tabs a { flex: 0 0 auto; padding: 10px 12px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: .92rem; border-bottom: 3px solid transparent; }
+nav.tabs a[aria-current="page"] { color: var(--ink); border-color: var(--accent); }
+nav.tabs a .dot { display: inline-block; min-width: 1.3em; padding: 0 .35em; margin-left: 4px; border-radius: 999px; background: var(--tag); color: var(--tag-ink); font-size: .72rem; text-align: center; }
+
+main { padding-block: 18px 60px; }
+section[data-view] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+h2 { font-family: var(--font-display); font-stretch: 85%; font-weight: 800; font-size: 1.35rem; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-stretch: 90%; font-weight: 700; font-size: 1.05rem; margin: 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.spread { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.spread > * { min-width: 0; max-width: 100%; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none; color: var(--ink); }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.big { padding: 16px 20px; font-size: 1.05rem; width: 100%; }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 6px 10px; font-size: .85rem; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.chip { flex: 0 0 auto; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: .88rem; font-weight: 500; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.note { padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); font-size: .92rem; }
+.note.warn { background: var(--warn-bg); }
+.note.bad { background: var(--bad-bg); color: var(--bad); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; display: grid; grid-template-rows: auto 1fr; cursor: pointer; text-align: left; padding: 0; position: relative; }
+.card:hover { border-color: var(--muted); }
+.thumbs { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 2px; aspect-ratio: 16 / 9; background: var(--surface-2); max-width: 100%; overflow: hidden; }
+.thumbs img { width: 100%; height: 100%; min-height: 0; object-fit: cover; display: block; }
+.thumbs img:first-child { grid-row: 1 / 3; }
+.thumbs .ph { display: grid; place-items: center; color: var(--muted); font-size: .8rem; grid-column: 1 / -1; grid-row: 1 / -1; }
+.card .body { padding: 12px; display: grid; gap: 8px; align-content: start; }
+.card .name { font-family: var(--font-display); font-weight: 700; font-stretch: 88%; font-size: 1.12rem; line-height: 1.15; text-transform: capitalize; }
+.meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: .78rem; }
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: .75rem; }
+.pill.fast { background: var(--good-bg); color: var(--good); }
+.pill.mid { background: var(--warn-bg); color: var(--warn); }
+.pill.slow { background: var(--bad-bg); color: var(--bad); }
+.prices { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
+.sells { display: grid; font-size: .8rem; color: var(--muted); }
+.sells b { font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); font-stretch: 90%; }
+
+.tag { position: relative; display: inline-grid; padding: 5px 12px 5px 22px; background: var(--tag); color: var(--tag-ink);
+  clip-path: polygon(12px 0, 100% 0, 100% 100%, 12px 100%, 0 50%); border-radius: 0 6px 6px 0; line-height: 1.05; text-align: right; }
+.tag::before { content: ""; position: absolute; left: 9px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--surface); }
+.tag small { font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.tag b { font-family: var(--font-display); font-weight: 800; font-stretch: 80%; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+.tag.none { background: var(--surface-2); color: var(--muted); }
+.tag.big b { font-size: 2.2rem; }
+
+.verdict { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; font-weight: 700; font-size: .9rem; }
+.verdict.buy { background: var(--good-bg); color: var(--good); }
+.verdict.maybe { background: var(--warn-bg); color: var(--warn); }
+.verdict.skip { background: var(--bad-bg); color: var(--bad); }
+.verdict span { font-weight: 500; font-size: .82rem; }
+
+.sheet-bg { position: fixed; inset: 0; background: rgb(0 0 0 / .45); z-index: 20; display: grid; align-items: end; justify-items: center; }
+.sheet { background: var(--bg); width: min(860px, 100%); max-height: 92vh; overflow-y: auto; border-radius: 16px 16px 0 0;
+  padding-block: 16px calc(24px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+@media (min-width: 760px) { .sheet-bg { align-items: center; } .sheet { border-radius: 16px; } }
+.sheet-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.sheet-head h2 { text-transform: capitalize; font-size: 1.6rem; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.kv > div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; }
+.kv b { font-family: var(--font-display); font-size: 1.3rem; font-stretch: 88%; font-variant-numeric: tabular-nums; }
+.kv span { font-size: .78rem; color: var(--muted); }
+.listings { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.listing { display: grid; gap: 4px; text-decoration: none; color: var(--ink); font-size: .82rem; min-width: 0; }
+.listing img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
+.listing .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listing .p { display: flex; justify-content: space-between; font-weight: 700; }
+.src { font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.src.t { color: var(--tradera); } .src.b { color: var(--blocket); }
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.chart text { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+
+.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.table th, .table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table th { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.table td.r, .table th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll-x { overflow-x: auto; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 2px; }
+.tile b { font-family: var(--font-display); font-weight: 800; font-stretch: 82%; font-size: 1.7rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tile span { font-size: .78rem; color: var(--muted); }
+.pos { color: var(--good); } .neg { color: var(--bad); }
+.inv { display: grid; gap: 8px; }
+.inv-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+.inv-item .controls { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.inv-item .title { font-weight: 600; text-transform: capitalize; }
+.bar { height: 10px; border-radius: 3px; background: var(--accent); }
+.barrow { display: grid; grid-template-columns: minmax(90px, 9rem) minmax(0, 1fr) 5.5rem; gap: 10px; align-items: center; font-size: .88rem; }
+.barrow .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: .88em; overflow-wrap: anywhere; }
+.empty { text-align: center; padding: 32px 16px; display: grid; gap: 10px; justify-items: center; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; z-index: 30; font-weight: 600; font-size: .9rem; max-width: calc(100% - 32px); }
+
+/* Foto */
+.shot { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: start; }
+.shot img.photo { width: 120px; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
+.preview { width: 100%; max-height: 320px; object-fit: contain; border-radius: 8px; background: var(--surface-2); }
+.fynd { display: grid; gap: 12px; }
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.cmp { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; cursor: pointer; background: var(--bg); text-align: left; }
+.cmp:hover { border-color: var(--muted); }
+.cmp .mini { display: flex; gap: 4px; overflow: hidden; }
+.cmp .mini img { width: 54px; height: 54px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 480px) {
+  .quick { grid-template-columns: minmax(0, 1fr) 7.5rem; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .card { grid-template-columns: 112px minmax(0, 1fr); grid-template-rows: none; }
+  .card .thumbs { aspect-ratio: auto; height: 100%; min-height: 112px; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .card .thumbs img:not(:first-child) { display: none; }
+  .card .thumbs img:first-child { grid-row: auto; }
+  .card .verdict { grid-column: 1 / -1; }
+  .tag b { font-size: 1.25rem; }
+  .shot { grid-template-columns: 84px minmax(0, 1fr); }
+  .shot img.photo { width: 84px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Thrift<span>kollen</span></h1>
+      <small id="status">Laddar…</small>
+    </div>
+    <div class="quick">
+      <div class="field">
+        <label for="q">Vad hittade du?</label>
+        <input id="q" type="search" placeholder="t.ex. mon amie, game boy, kånken" autocomplete="off" enterkeyhint="search">
+      </div>
+      <div class="field">
+        <label for="price">Pris i butiken</label>
+        <input id="price" type="number" inputmode="numeric" min="0" step="5" placeholder="kr">
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Vyer">
+      <a href="#fynd" data-tab="fynd">Katalog</a>
+      <a href="#foto" data-tab="foto">Fota<span class="dot" id="pendingDot" hidden></span></a>
+      <a href="#lager" data-tab="lager">Lager</a>
+      <a href="#statistik" data-tab="statistik">Statistik</a>
+      <a href="#installningar" data-tab="installningar">Inställningar</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section data-view="fynd" id="v-fynd"></section>
+  <section data-view="foto" id="v-foto" hidden></section>
+  <section data-view="lager" id="v-lager" hidden></section>
+  <section data-view="statistik" id="v-statistik" hidden></section>
+  <section data-view="installningar" id="v-installningar" hidden></section>
+</main>
+<div id="sheet"></div>
+<div id="toast" class="toast" hidden></div>
+<input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+<input id="photoPick" type="file" accept="image/*" hidden>
+<input id="invImport" type="file" accept=".json,application/json" hidden>
+
+<script>
+(() => {
+'use strict';
+const CATS = ['Möbler & stolar', 'Porslin & glas', 'Elektronik & retro', 'Kläder & märken', 'Barn & fritid', 'Övrigt'];
+const DEFAULT_CFG = { minProfit: 100, minMult: 2, mode: 'any', valuation: 'bal', platform: 'tradera',
+  traderaPct: 10, traderaMin: 3, traderaCap: 200, blocketFee: 0, haggle: 20 };
+const TABS = ['fynd', 'foto', 'lager', 'statistik', 'installningar'];
+
+// ---------- lagring på enheten ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+function guessRepo() {
+  const h = location.hostname;
+  if (h.endsWith('.github.io')) { const owner = h.split('.')[0]; const repo = location.pathname.split('/').filter(Boolean)[0] || `${owner}.github.io`; return { owner, repo }; }
+  return { owner: '', repo: 'thriftkollen' };
+}
+const gh = Object.assign({ branch: 'main', token: '' }, guessRepo(), store.get('tk-github', {}));
+
+const S = { terms: new Map(), fynd: [], meta: null, inv: store.get('tk-inventory', []), cfg: { ...DEFAULT_CFG, ...store.get('tk-settings', {}) },
+  pending: store.get('tk-pending', []), state: 'loading', loadErr: null, tab: 'fynd', cat: store.get('tk-cat', 'Alla'), sort: store.get('tk-sort', 'max'),
+  q: '', price: null, open: null, confirm: null, photo: null, uploading: false, run: null, fyndPrice: {} };
+
+// ---------- hjälpare ----------
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const kr = n => (n == null || !isFinite(n)) ? '–' : Math.round(n).toLocaleString('sv-SE') + ' kr';
+const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '').replace(/[^\p{L}\p{N} ]+/gu, '').replace(/\s+/g, ' ').trim();
+const slug = q => norm(q).replace(/ /g, '-').slice(0, 120);
+const safeUrl = u => /^https:\/\/(www\.)?(tradera\.com|blocket\.se)\//.test(u || '') ? u : null;
+const safeImg = u => /^https:\/\/(images\.blocketcdn\.se|img\.tradera\.net)\//.test(u || '') || /^data:image\/jpeg;base64,/.test(u || '') ? u : null;
+const daysAgo = iso => { const d = (Date.now() - new Date(iso)) / 864e5; return isFinite(d) ? d : null; };
+const when = iso => { const d = daysAgo(iso); if (d == null) return '–'; if (d < 1 / 24) return Math.max(1, Math.round(d * 1440)) + ' min sedan'; if (d < 1) return Math.round(d * 24) + ' h sedan'; return Math.round(d) + ' d sedan'; };
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3200); }
+const rawUrl = path => `https://raw.githubusercontent.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/${gh.branch}/${path}`;
+const b64 = str => { const bytes = new TextEncoder().encode(str); let s = ''; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s); };
+const fromB64 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
+
+// ---------- GitHub ----------
+async function api(path, opts = {}) {
+  const headers = { 'Accept': opts.accept || 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  if (gh.token) headers.Authorization = `Bearer ${gh.token}`;
+  if (opts.body) headers['Content-Type'] = 'application/json';
+  const r = await fetch(`https://api.github.com${path}`, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined, cache: 'no-store' });
+  if (!r.ok) {
+    let msg = `${r.status}`; try { msg += ' ' + (await r.json()).message; } catch {}
+    const e = new Error(msg); e.status = r.status; throw e;
+  }
+  return r.status === 204 ? null : (opts.accept && opts.accept.includes('raw') ? r.text() : r.json());
+}
+const repoPath = p => `/repos/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}${p}`;
+async function readRepoJson(path) {
+  if (gh.token && gh.owner) {
+    try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=${gh.branch}`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; }
+  }
+  const r = await fetch(`./${path}?t=${Date.now()}`, { cache: 'no-store' });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function putFile(path, contentB64, message, sha) {
+  return api(repoPath(`/contents/${path}`), { method: 'PUT', body: { message, content: contentB64, branch: gh.branch, ...(sha ? { sha } : {}) } });
+}
+async function updateRepoJson(path, mutate, message) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const cur = await api(repoPath(`/contents/${path}?ref=${gh.branch}`));
+    const data = JSON.parse(fromB64(cur.content));
+    const next = mutate(data);
+    try { return await putFile(path, b64(JSON.stringify(next, null, 1)), message, cur.sha); }
+    catch (e) { if (e.status !== 409) throw e; }
+  }
+  throw new Error('Filen ändrades samtidigt. Försök igen.');
+}
+async function dispatchScrape() {
+  await api(repoPath('/actions/workflows/scrape.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { full: true } } });
+}
+async function latestRun() {
+  try { const r = await api(repoPath('/actions/runs?per_page=1')); return r.workflow_runs && r.workflow_runs[0]; } catch { return null; }
+}
+
+// ---------- data ----------
+async function loadData(quiet) {
+  try {
+    const [td, fy] = await Promise.all([readRepoJson('data/thriftdata.json'), readRepoJson('data/fynd.json')]);
+    if (td) { S.terms = new Map((td.terms || []).map(t => [t.id, t])); S.meta = { generatedAt: td.generatedAt }; }
+    S.fynd = (fy && fy.items) || [];
+    const done = new Set(S.fynd.map(f => f.id));
+    const before = S.pending.length;
+    S.pending = S.pending.filter(p => !done.has(p.id) && daysAgo(p.createdAt) < 1);
+    if (S.pending.length !== before) { store.set('tk-pending', S.pending); if (!quiet || before > S.pending.length) toast('Fotot är scrapat. Resultatet ligger under Fota.'); }
+    S.state = 'ready'; S.loadErr = null;
+  } catch (e) { S.loadErr = e.message; if (S.state === 'loading') S.state = 'error'; }
+  render();
+}
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  if (!S.pending.length) { S.run = null; return; }
+  pollTimer = setTimeout(async () => { if (gh.token) S.run = await latestRun(); await loadData(true); schedulePoll(); }, 15000);
+}
+
+// ---------- ekonomi ----------
+function fee(platform, price) {
+  const c = S.cfg;
+  if (platform === 'tradera') return Math.min(c.traderaCap, Math.max(c.traderaMin, price * c.traderaPct / 100));
+  if (platform === 'blocket') return c.blocketFee;
+  return 0;
+}
+function valuation(t) {
+  if (!t) return null;
+  const T = t.tradera && t.tradera.stats, B = t.blocket && t.blocket.stats;
+  const tv = T && T.n >= 3 ? T.med : null;
+  const bv = B && B.n >= 3 ? B.med * (1 - S.cfg.haggle / 100) : null;
+  const vals = [tv, bv].filter(v => v != null);
+  if (!vals.length) return null;
+  let resale;
+  if (S.cfg.valuation === 'safe') resale = tv ?? bv;
+  else if (S.cfg.valuation === 'opt') resale = Math.max(...vals);
+  else resale = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const net = resale - fee(S.cfg.platform, resale);
+  return { resale, net, tv, bv, max: maxBuy(net) };
+}
+function maxBuy(net) {
+  const a = net - S.cfg.minProfit, b = net / S.cfg.minMult;
+  const v = S.cfg.mode === 'all' ? Math.min(a, b) : Math.max(a, b);
+  return v >= 5 ? Math.floor(v / 5) * 5 : 0;
+}
+function verdict(v, price) {
+  if (!v || price == null || price < 0) return null;
+  const profit = v.net - price, mult = price > 0 ? v.net / price : Infinity;
+  const okP = profit >= S.cfg.minProfit, okM = mult >= S.cfg.minMult;
+  const ok = S.cfg.mode === 'all' ? okP && okM : okP || okM;
+  const cls = ok ? 'buy' : (profit > 0 && price <= v.max * 1.25 + 10 ? 'maybe' : 'skip');
+  return { cls, label: cls === 'buy' ? 'Köp' : cls === 'maybe' ? 'Kanske, pruta' : 'Skippa', profit, mult };
+}
+function speed(t) {
+  const B = t && t.blocket && t.blocket.stats;
+  if (!B || B.ageMed == null || B.n < 3) return { cls: '', label: 'Okänd takt', rank: 999 };
+  const a = B.ageMed;
+  if (a <= 14) return { cls: 'fast', label: 'Säljer snabbt', rank: a };
+  if (a <= 45) return { cls: 'mid', label: 'Medeltakt', rank: a };
+  return { cls: 'slow', label: 'Säljer långsamt', rank: a };
+}
+const dataCount = t => ((t.tradera && t.tradera.stats && t.tradera.stats.n) || 0) + ((t.blocket && t.blocket.stats && t.blocket.stats.n) || 0);
+const verdictHTML = (vd, round) => vd ? `<div class="verdict ${vd.cls}" ${round ? 'style="border-radius:8px"' : ''}>${vd.label}<span class="num">${vd.profit >= 0 ? '+' : ''}${kr(vd.profit)} · x${isFinite(vd.mult) ? vd.mult.toFixed(1) : '∞'}</span></div>` : '';
+const tagHTML = (v, big, label = 'Max i butik') => v && v.max > 0 ? `<div class="tag ${big ? 'big' : ''}"><small>${label}</small><b>${kr(v.max)}</b></div>`
+  : `<div class="tag none ${big ? 'big' : ''}"><small>${label}</small><b>${v ? 'Lönar ej' : '–'}</b></div>`;
+
+// ---------- sök ----------
+function matches(t, q) {
+  if (!q) return 1;
+  const hay = norm(t.q + ' ' + (t.must || '') + ' ' + t.cat);
+  const qt = norm(q).split(' ').filter(Boolean);
+  let score = 0;
+  for (const w of qt) { if (hay.includes(w)) score += 2; else if (w.length >= 4 && hay.split(' ').some(h => h.startsWith(w.slice(0, 4)))) score += 1; }
+  const mustT = norm(t.must && t.must !== '*' ? t.must : t.q).split(' ').filter(w => w.length >= 2);
+  if (mustT.length && mustT.every(m => norm(q).includes(m))) score += 3;
+  return score >= Math.max(2, qt.length) ? score : 0;
+}
+const searchLinks = q => {
+  const e = encodeURIComponent(q);
+  return `<a class="btn small" target="_blank" rel="noopener" href="https://www.tradera.com/search?q=${e}&itemStatus=Ended">Sålda på Tradera ↗</a>
+    <a class="btn small" target="_blank" rel="noopener" href="https://www.blocket.se/recommerce/forsale/search?q=${e}">Blocket ↗</a>
+    <a class="btn small" target="_blank" rel="noopener" href="https://www.facebook.com/marketplace/stockholm/search?query=${e}">FB Marketplace ↗</a>`;
+};
+const imgTag = (src, cls = '') => `<img src="${src}" alt="" loading="lazy" referrerpolicy="no-referrer" ${cls ? `class="${cls}"` : ''}>`;
+
+// ---------- vy: Katalog ----------
+function cardHTML(t) {
+  const v = valuation(t), sp = speed(t), vd = verdict(v, S.price);
+  const imgs = (t.listings || []).map(l => safeImg(l.img)).filter(Boolean).slice(0, 3);
+  const thumbs = imgs.length ? imgs.map(s => imgTag(s)).join('') : `<div class="ph">Ingen bild</div>`;
+  const low = dataCount(t) < 6 ? '<span class="pill">Lite data</span>' : '';
+  const foto = t.source === 'foto' ? '<span class="pill">Från foto</span>' : '';
+  return `<button class="card" data-open="${esc(t.id)}" aria-label="${esc(t.q)}">
+    <div class="thumbs">${thumbs}</div>
+    <div class="body">
+      <div class="name">${esc(t.q)}</div>
+      <div class="meta"><span class="pill">${esc(t.cat)}</span><span class="pill ${sp.cls}">${sp.label}</span>${low}${foto}</div>
+      <div class="prices"><div class="sells">Säljs för ca<b class="num">${v ? kr(v.resale) : '–'}</b></div>${tagHTML(v)}</div>
+    </div>${verdictHTML(vd)}</button>`;
+}
+function renderFynd() {
+  const el = $('#v-fynd');
+  if (S.state === 'loading') { el.innerHTML = `<div class="empty muted"><span class="spinner"></span>Hämtar katalogen…</div>`; return; }
+  if (S.state === 'error') { el.innerHTML = `<div class="note bad">Kunde inte läsa datan: ${esc(S.loadErr)}. Kolla anslutningen under Inställningar.</div>`; return; }
+  const all = [...S.terms.values()];
+  if (!all.length) { el.innerHTML = `<div class="panel empty"><h2>Katalogen är tom</h2><p class="muted">Kör en full scrape under Inställningar.</p></div>`; return; }
+  const cats = ['Alla', ...CATS.filter(c => all.some(t => t.cat === c))];
+  if (!cats.includes(S.cat)) S.cat = 'Alla';
+  const scored = all.filter(t => S.cat === 'Alla' || t.cat === S.cat).map(t => [t, matches(t, S.q)]).filter(([, s]) => s > 0);
+  let list = scored.map(([t]) => t);
+  const vc = new Map(list.map(t => [t.id, valuation(t)]));
+  const sorters = {
+    max: (a, b) => (vc.get(b.id)?.max ?? -1) - (vc.get(a.id)?.max ?? -1),
+    value: (a, b) => (vc.get(b.id)?.resale ?? -1) - (vc.get(a.id)?.resale ?? -1),
+    fast: (a, b) => speed(a).rank - speed(b).rank,
+    name: (a, b) => a.q.localeCompare(b.q, 'sv'),
+  };
+  if (S.q) { const sc = new Map(scored.map(([t, s]) => [t.id, s])); list.sort((a, b) => sc.get(b.id) - sc.get(a.id) || sorters[S.sort](a, b)); } else list.sort(sorters[S.sort]);
+  const fallback = S.q && !list.length ? `<div class="panel"><h3>Ingen träff på ”${esc(S.q)}” i katalogen</h3>
+      <p class="muted">Fota varan så scrapas den automatiskt, eller kolla priset direkt.</p>
+      <div class="row"><a class="btn primary small" href="#foto">Fota och scrapa</a>${searchLinks(S.q)}</div></div>` : '';
+  const hint = S.q && list.length ? `<div class="row muted small">Inte rätt vara? ${searchLinks(S.q)}</div>` : '';
+  el.innerHTML = `
+    <div class="spread">
+      <div class="chips" role="group" aria-label="Kategori">${cats.map(c => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${S.cat === c}">${esc(c)}</button>`).join('')}</div>
+      <div class="row"><label class="lbl" for="sort">Sortera</label>
+        <select id="sort" style="width:auto">
+          ${[['max', 'Högst maxpris'], ['value', 'Högst säljvärde'], ['fast', 'Säljer snabbast'], ['name', 'A–Ö']].map(([k, l]) => `<option value="${k}" ${S.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
+    </div>
+    ${S.price != null ? `<div class="note">Visar köpbesked för butikspris <b class="num">${kr(S.price)}</b>. Kravet är ${ruleText()}.</div>` : ''}
+    ${fallback}${hint}
+    <div class="grid">${list.map(cardHTML).join('')}</div>`;
+}
+function ruleText() { const c = S.cfg; return `minst ${kr(c.minProfit)} vinst${c.mode === 'all' ? ' och ' : ' eller '}x${c.minMult} efter avgifter`; }
+
+// ---------- detaljvy ----------
+function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw || 1))); const n = raw / p; return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p; }
+function stripSVG(t, v, price) {
+  const T = (t.tradera && t.tradera.stats && t.tradera.stats.prices) || [];
+  const B = (t.blocket && t.blocket.stats && t.blocket.stats.prices) || [];
+  const all = [...T, ...B, v ? v.max : 0, price || 0].filter(x => x > 0);
+  if (!all.length) return '';
+  const W = 640, H = 150, L = 64, R = 20, maxV = Math.max(...all) * 1.05;
+  const x = p => L + (p / maxV) * (W - L - R);
+  const step = niceStep(maxV / 5);
+  let ticks = ''; for (let p = 0; p <= maxV; p += step) ticks += `<line x1="${x(p)}" x2="${x(p)}" y1="18" y2="${H - 26}" stroke="var(--line)"/><text x="${x(p)}" y="${H - 10}" text-anchor="middle">${p.toLocaleString('sv-SE')}</text>`;
+  const row = (arr, y, color, label, med) => arr.length ? `<text x="0" y="${y + 4}">${label}</text>` +
+    arr.map((p, i) => `<circle cx="${x(p).toFixed(1)}" cy="${y + ((i % 5) - 2) * 3}" r="3.2" fill="${color}" fill-opacity=".55"/>`).join('') +
+    `<line x1="${x(med)}" x2="${x(med)}" y1="${y - 12}" y2="${y + 12}" stroke="var(--ink)" stroke-width="2.5"/>` : '';
+  const TS = t.tradera && t.tradera.stats, BS = t.blocket && t.blocket.stats;
+  let marks = '';
+  if (v && v.max > 0) marks += `<line x1="${x(v.max)}" x2="${x(v.max)}" y1="10" y2="${H - 26}" stroke="var(--good)" stroke-width="2" stroke-dasharray="4 3"/><text x="${x(v.max) + 4}" y="14" style="fill:var(--good);font-weight:600">max ${v.max}</text>`;
+  if (price) marks += `<line x1="${x(price)}" x2="${x(price)}" y1="10" y2="${H - 26}" stroke="var(--bad)" stroke-width="2"/><text x="${x(price) - 4}" y="14" text-anchor="end" style="fill:var(--bad);font-weight:600">butik ${price}</text>`;
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Prisfördelning">${ticks}${row(T, 46, 'var(--tradera)', 'Tradera', TS && TS.med)}${row(B, 92, 'var(--blocket)', 'Blocket', BS && BS.med)}${marks}</svg></div>
+    <div class="muted small">Varje prick är en annons. Svart streck = median. Tradera visar avslutade annonser, Blocket visar aktiva annonser (utropspris).</div>`;
+}
+function getOpen() {
+  if (!S.open) return null;
+  if (S.open.startsWith('f:')) { const [, id, kind] = S.open.split(':'); const f = S.fynd.find(x => x.id === id); return f ? (kind === 'g' ? f.generic || f.specific : f.specific) : null; }
+  return S.terms.get(S.open);
+}
+function renderSheet() {
+  const host = $('#sheet'); const t = getOpen();
+  if (!t) { host.innerHTML = ''; document.body.style.overflow = ''; return; }
+  document.body.style.overflow = 'hidden';
+  const v = valuation(t), sp = speed(t), TS = t.tradera && t.tradera.stats, BS = t.blocket && t.blocket.stats, p = S.price, vd = verdict(v, p);
+  const listings = (t.listings || []).map(l => {
+    const u = safeUrl(l.u), img = safeImg(l.img);
+    return `<a class="listing" ${u ? `href="${u}" target="_blank" rel="noopener"` : ''}>${img ? imgTag(img) : ''}
+      <div class="p"><span class="src ${l.s}">${l.s === 't' ? 'Tradera' : 'Blocket'}</span><span class="num">${kr(l.p)}</span></div><div class="t muted">${esc(l.t)}</div></a>`;
+  }).join('');
+  host.innerHTML = `<div class="sheet-bg" data-close="1"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(t.q)}">
+    <div class="sheet-head"><div><div class="lbl">${esc(t.cat)}</div><h2>${esc(t.q)}</h2>
+      <div class="row" style="margin-top:6px"><span class="pill ${sp.cls}">${sp.label}${BS && BS.ageMed != null ? ` · annonser ligger ~${Math.round(BS.ageMed)} d` : ''}</span>
+      ${t.scrapedAt ? `<span class="pill">Data ${when(t.scrapedAt)}</span>` : ''}</div></div>
+      <button class="btn small" data-close="1">Stäng ✕</button></div>
+    <div class="spread">${tagHTML(v, true, 'Betala max')}
+      <div class="field" style="width:11rem"><label for="sheetPrice">Pris i butiken</label><input id="sheetPrice" type="number" inputmode="numeric" min="0" step="5" value="${p ?? ''}" placeholder="kr"></div></div>
+    ${verdictHTML(vd, true)}
+    <div class="kv">
+      <div><span>Tradera, median (avslutat)</span><b>${TS ? kr(TS.med) : '–'}</b><span>${TS ? `${TS.n} st · ${kr(TS.p25)}–${kr(TS.p75)}` : 'ingen data'}</span></div>
+      <div><span>Blocket, median (utrop)</span><b>${BS ? kr(BS.med) : '–'}</b><span>${BS ? `${BS.n} privata · ${BS.total ?? '?'} totalt` : 'ingen data'}</span></div>
+      <div><span>Uppskattat säljpris</span><b>${v ? kr(v.resale) : '–'}</b><span>${{ safe: 'Försiktig', bal: 'Balanserad', opt: 'Optimistisk' }[S.cfg.valuation]} värdering</span></div>
+      <div><span>Du får ut efter avgift</span><b>${v ? kr(v.net) : '–'}</b><span>${v ? `avgift ${kr(v.resale - v.net)}` : ''}</span></div>
+    </div>
+    ${stripSVG(t, v, p)}
+    <div class="row">
+      <button class="btn primary" data-buy="${esc(t.q)}">Köpt! Lägg i lager</button>
+      ${t.tradera && safeUrl(t.tradera.url) ? `<a class="btn" target="_blank" rel="noopener" href="${safeUrl(t.tradera.url)}">Alla på Tradera ↗</a>` : ''}
+      ${t.blocket && safeUrl(t.blocket.url) ? `<a class="btn" target="_blank" rel="noopener" href="${safeUrl(t.blocket.url)}">Alla på Blocket ↗</a>` : ''}
+    </div>
+    ${listings ? `<h3>Jämförbara annonser</h3><div class="listings">${listings}</div>` : ''}
+  </div></div>`;
+}
+
+// ---------- vy: Fota ----------
+function cmpHTML(f, kind, t, title) {
+  if (!t) return '';
+  const v = valuation(t), sp = speed(t), TS = t.tradera && t.tradera.stats, BS = t.blocket && t.blocket.stats;
+  const price = S.fyndPrice[f.id] ?? S.price;
+  const imgs = (t.listings || []).map(l => safeImg(l.img)).filter(Boolean).slice(0, 5);
+  return `<button class="cmp" data-open="f:${esc(f.id)}:${kind}">
+    <div class="spread"><div><div class="lbl">${title}</div><div style="font-weight:600;text-transform:capitalize">”${esc(t.q)}”</div></div>${tagHTML(v)}</div>
+    <div class="meta"><span class="pill">Tradera ${TS ? kr(TS.med) + ' · ' + TS.n + ' st' : '–'}</span><span class="pill">Blocket ${BS ? kr(BS.med) + ' · ' + BS.n + ' st' : '–'}</span><span class="pill ${sp.cls}">${sp.label}</span></div>
+    ${imgs.length ? `<div class="mini">${imgs.map(s => imgTag(s)).join('')}</div>` : '<div class="muted small">Inga jämförbara annonser hittades.</div>'}
+    ${verdictHTML(verdict(v, price), true)}
+  </button>`;
+}
+function fyndHTML(f) {
+  const ai = f.ai || {};
+  const photo = f.photo ? imgTag(rawUrl(f.photo), 'photo') : '';
+  if (f.status === 'fel') return `<div class="panel"><div class="shot">${photo}<div class="fynd"><h3>${esc(f.text || 'Foto')}</h3><div class="note bad">${esc(f.message || 'Något gick fel.')}</div>
+    <div class="muted small">${when(f.processedAt)}</div></div></div></div>`;
+  const conf = { low: 'osäker', medium: 'ganska säker', high: 'säker' }[ai.confidence] || '';
+  return `<div class="panel"><div class="shot">${photo}<div class="fynd">
+      <div><div class="lbl">${esc(ai.category || '')} · ${when(f.processedAt)}</div><h3 style="font-size:1.25rem">${esc(ai.name || f.text)}</h3>
+        <div class="meta" style="margin-top:4px">${ai.brand ? `<span class="pill">${esc(ai.brand)}${ai.model ? ' ' + esc(ai.model) : ''}</span>` : ''}${conf ? `<span class="pill">AI: ${conf}</span>` : ''}${f.text ? `<span class="pill">Din text: ${esc(f.text)}</span>` : ''}</div></div>
+      ${ai.notes ? `<p class="muted small">${esc(ai.notes)}</p>` : ''}
+      ${f.message ? `<div class="note warn small">${esc(f.message)}</div>` : ''}
+      <div class="field" style="max-width:11rem"><label for="fp-${esc(f.id)}">Pris i butiken</label><input id="fp-${esc(f.id)}" data-fprice="${esc(f.id)}" type="number" inputmode="numeric" min="0" step="5" value="${S.fyndPrice[f.id] ?? ''}" placeholder="kr"></div>
+    </div></div>
+    <div class="compare">${cmpHTML(f, 's', f.specific, 'Samma märke/modell')}${cmpHTML(f, 'g', f.generic, 'Varutypen i stort')}</div>
+    <div class="row"><button class="btn small" data-buy="${esc(ai.name || f.text || '')}" data-buyprice="${esc(f.id)}">Köpt! Lägg i lager</button>${searchLinks(ai.specificQuery || f.text || '')}</div>
+  </div>`;
+}
+function renderFoto() {
+  const el = $('#v-foto');
+  const ready = gh.token && gh.owner;
+  const p = S.photo;
+  const run = S.run ? `<span class="pill">GitHub: ${esc({ queued: 'i kö', in_progress: 'kör', completed: S.run.conclusion === 'success' ? 'klar' : 'misslyckades' }[S.run.status] || S.run.status)}</span>` : '';
+  el.innerHTML = `
+    <div class="panel">
+      <h2>Fota en vara</h2>
+      ${!ready ? `<div class="note warn">För att skicka foton behöver appen en GitHub-nyckel på den här enheten. <a href="#installningar">Lägg in den under Inställningar</a>.</div>` : ''}
+      ${p ? `<img class="preview" src="${p.url}" alt="Förhandsvisning">` : `<button class="btn primary big" data-photo="camera">Ta bild</button>
+        <button class="btn" data-photo="pick">Välj bild från galleriet</button>`}
+      ${p ? `<form id="photoForm" class="form-grid">
+          <div class="field" style="grid-column:1/-1"><label for="photoText">Vad är det? (valfritt)</label><input id="photoText" type="text" placeholder="t.ex. barncykelstol Thule" value="${esc(p.text || '')}"></div>
+          <div class="field"><label for="photoCat">Kategori</label><select id="photoCat"><option value="">Låt AI avgöra</option>${CATS.map(c => `<option ${p.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+          <button class="btn primary" type="submit" ${S.uploading || !ready ? 'disabled' : ''}>${S.uploading ? 'Skickar…' : 'Skicka och scrapa'}</button>
+          <button class="btn" type="button" data-photo="clear">Ta om</button>
+        </form>` : ''}
+      <p class="muted small">Claude känner igen varan och scrapar både samma märke och varutypen i stort. Det tar oftast 2–4 minuter. Varutypen hamnar också i katalogen och uppdateras vid varje full scrape.</p>
+    </div>
+    ${S.pending.length ? `<div class="panel"><div class="spread"><h3>Scrapas just nu</h3>${run}</div>
+      ${S.pending.map(x => `<div class="shot">${x.thumb ? `<img class="photo" src="${x.thumb}" alt="">` : ''}<div class="fynd"><div class="row"><span class="spinner"></span><b>${esc(x.text || 'Foto utan text')}</b></div>
+      <div class="muted small">Skickat ${when(x.createdAt)}. Sidan uppdateras själv.</div></div></div>`).join('')}</div>` : ''}
+    ${S.fynd.length ? S.fynd.map(fyndHTML).join('') : `<div class="panel empty"><h3>Inga fotade varor än</h3><p class="muted">Ta en bild på något i butiken, så visas jämförelsen här.</p></div>`}`;
+}
+async function onPhotoChosen(file) {
+  if (!file) return;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
+    const img = bmp || await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+    const w = img.width, h = img.height, scale = Math.min(1, 1024 / Math.max(w, h));
+    const c = document.createElement('canvas'); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const url = c.toDataURL('image/jpeg', 0.82);
+    const t = document.createElement('canvas'), s = 160 / Math.max(c.width, c.height); t.width = Math.round(c.width * s); t.height = Math.round(c.height * s);
+    t.getContext('2d').drawImage(c, 0, 0, t.width, t.height);
+    S.photo = { url, thumb: t.toDataURL('image/jpeg', 0.7), text: '', cat: '' };
+    render(); setTimeout(() => $('#photoText') && $('#photoText').focus(), 50);
+  } catch { toast('Kunde inte läsa bilden. Prova en annan.'); }
+}
+async function sendPhoto() {
+  const p = S.photo; if (!p) return;
+  p.text = $('#photoText').value.trim(); p.cat = $('#photoCat').value;
+  const id = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '-' + Math.random().toString(36).slice(2, 6);
+  S.uploading = true; render();
+  try {
+    await putFile(`uploads/${id}.jpg`, p.url.split(',')[1], `Foto ${id}`);
+    const job = { id, createdAt: new Date().toISOString(), text: p.text, cat: p.cat, image: `uploads/${id}.jpg` };
+    await putFile(`queue/${id}.json`, b64(JSON.stringify(job)), `Scrapa foto ${id}${p.text ? ': ' + p.text : ''}`);
+    S.pending.unshift({ id, createdAt: job.createdAt, text: p.text, thumb: p.thumb }); store.set('tk-pending', S.pending);
+    S.photo = null; toast('Skickat. Scrapen startar på GitHub.');
+    schedulePoll();
+  } catch (e) {
+    toast(e.status === 401 || e.status === 403 ? 'GitHub nekade. Kolla nyckeln och dess behörigheter under Inställningar.' : 'Kunde inte skicka: ' + e.message);
+  } finally { S.uploading = false; render(); }
+}
+
+// ---------- vy: Lager ----------
+function saveInv() { store.set('tk-inventory', S.inv); }
+function renderLager() {
+  const el = $('#v-lager');
+  const inv = [...S.inv].sort((a, b) => (b.boughtAt || '').localeCompare(a.boughtAt || ''));
+  const sold = inv.filter(i => i.status === 'sold'), unsold = inv.filter(i => i.status !== 'sold');
+  const invested = inv.reduce((s, i) => s + (+i.buy || 0), 0);
+  const revenue = sold.reduce((s, i) => s + (+i.soldPrice || 0), 0);
+  const soldCost = sold.reduce((s, i) => s + (+i.buy || 0), 0);
+  const realized = revenue - soldCost;
+  const stockValue = unsold.reduce((s, i) => { const v = valuation(S.terms.get(i.termId)); return s + (v ? v.net : (+i.buy || 0)); }, 0);
+  const days = sold.map(i => i.soldAt && i.boughtAt ? (new Date(i.soldAt) - new Date(i.boughtAt)) / 864e5 : null).filter(d => d != null && d >= 0);
+  const opts = [...S.terms.values()].sort((a, b) => a.q.localeCompare(b.q, 'sv')).map(t => `<option value="${esc(t.q)}"></option>`).join('');
+  el.innerHTML = `
+    <div class="tiles">
+      <div class="tile"><span>Investerat totalt</span><b class="num">${kr(invested)}</b><span>${inv.length} saker köpta</span></div>
+      <div class="tile"><span>Sålt för</span><b class="num">${kr(revenue)}</b><span>${sold.length} sålda</span></div>
+      <div class="tile"><span>Vinst på sålda</span><b class="num ${realized >= 0 ? 'pos' : 'neg'}">${kr(realized)}</b><span>${soldCost ? 'x' + (revenue / soldCost).toFixed(1) + ' på insatsen' : '–'}</span></div>
+      <div class="tile"><span>I källaren nu</span><b class="num">${unsold.length} st</b><span>uppskattat värde ${kr(stockValue)}</span></div>
+      <div class="tile"><span>Snitt tid till såld</span><b class="num">${days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) + ' d' : '–'}</b><span>från köp till såld</span></div>
+    </div>
+    <form class="panel" id="invForm"><h3>Lägg till köp</h3>
+      <div class="form-grid">
+        <div class="field"><label for="invName">Vara</label><input id="invName" type="text" list="termList" required placeholder="t.ex. rörstrand mon amie fat"><datalist id="termList">${opts}</datalist></div>
+        <div class="field"><label for="invBuy">Inköpspris (kr)</label><input id="invBuy" type="number" inputmode="numeric" min="0" required value="${S.price ?? ''}"></div>
+        <div class="field"><label for="invDate">Köpt</label><input id="invDate" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
+        <button class="btn primary" type="submit">Lägg i lager</button>
+      </div>
+      <p class="muted small">Lagret sparas bara på den här enheten. Ta en säkerhetskopia under Inställningar ibland.</p>
+    </form>
+    ${inv.length ? `<div class="inv">${inv.map(invItemHTML).join('')}</div>` : `<div class="panel empty"><h3>Inget i lagret än</h3><p class="muted">Tryck ”Köpt! Lägg i lager” på en vara eller fyll i formuläret ovan.</p></div>`}`;
+}
+function invItemHTML(i) {
+  const v = valuation(S.terms.get(i.termId));
+  const profit = i.status === 'sold' ? (+i.soldPrice || 0) - (+i.buy || 0) : (v ? v.net - (+i.buy || 0) : null);
+  const id = esc(i.id);
+  return `<div class="inv-item" data-inv="${id}">
+    <div><div class="title">${esc(i.name)}</div><div class="muted num small">Köpt ${esc(i.boughtAt || '')} för ${kr(i.buy)}${v && i.status !== 'sold' ? ` · uppskattat ${kr(v.resale)}` : ''}</div></div>
+    <div class="num ${profit == null ? 'muted' : profit >= 0 ? 'pos' : 'neg'}" style="font-weight:700;text-align:right">${profit == null ? '–' : (profit >= 0 ? '+' : '') + kr(profit)}<div class="muted" style="font-size:.72rem;font-weight:500">${i.status === 'sold' ? 'vinst' : 'förväntat'}</div></div>
+    <div class="controls">
+      <div class="field"><label for="st-${id}">Status</label><select id="st-${id}" data-f="status">${[['stock', 'I källaren'], ['listed', 'Ute till salu'], ['sold', 'Såld']].map(([k, l]) => `<option value="${k}" ${i.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="pf-${id}">Plattform</label><select id="pf-${id}" data-f="platform">${['', 'Tradera', 'Blocket', 'FB Marketplace', 'Annat'].map(p => `<option value="${p}" ${i.platform === p ? 'selected' : ''}>${p || '–'}</option>`).join('')}</select></div>
+      ${i.status === 'sold' ? `<div class="field"><label for="sp-${id}">Fick betalt (kr)</label><input id="sp-${id}" data-f="soldPrice" type="number" inputmode="numeric" min="0" value="${i.soldPrice ?? ''}"></div>
+      <div class="field"><label for="sd-${id}">Såld</label><input id="sd-${id}" data-f="soldAt" type="date" value="${esc(i.soldAt || '')}"></div>` : ''}
+      <div class="field" style="align-self:end"><button class="btn small danger" data-delinv="${id}">${S.confirm === 'inv:' + i.id ? 'Säker? Ta bort' : 'Ta bort'}</button></div>
+    </div></div>`;
+}
+
+// ---------- vy: Statistik ----------
+function renderStats() {
+  const el = $('#v-statistik');
+  const all = [...S.terms.values()].map(t => ({ t, v: valuation(t), sp: speed(t) }));
+  if (!all.length) { el.innerHTML = `<div class="panel empty"><h3>Ingen statistik än</h3></div>`; return; }
+  const withV = all.filter(x => x.v);
+  const top = [...withV].sort((a, b) => b.v.max - a.v.max).slice(0, 12), topMax = Math.max(1, ...top.map(x => x.v.max));
+  const fast = all.filter(x => x.sp.rank < 999).sort((a, b) => a.sp.rank - b.sp.rank).slice(0, 10);
+  const byCat = CATS.map(c => { const xs = withV.filter(x => x.t.cat === c); if (!xs.length) return null;
+    const ms = xs.map(x => x.v.max).sort((a, b) => a - b); return { c, n: xs.length, med: ms[Math.floor((ms.length - 1) / 2)], good: xs.filter(x => x.v.max >= 100).length }; }).filter(Boolean);
+  const catMax = Math.max(1, ...byCat.map(x => x.med));
+  const gap = withV.filter(x => x.v.tv && x.t.blocket && x.t.blocket.stats).map(x => ({ ...x, ratio: x.t.blocket.stats.med / x.v.tv })).sort((a, b) => b.ratio - a.ratio).slice(0, 8);
+  const bars = (rows, max, val, lab, right) => rows.map(r => `<div class="barrow"><span class="lab" title="${esc(lab(r))}">${esc(lab(r))}</span><div class="bar" style="width:${Math.max(2, val(r) / max * 100)}%"></div><span class="num" style="text-align:right">${right(r)}</span></div>`).join('');
+  const last = S.meta && S.meta.generatedAt;
+  el.innerHTML = `
+    <div class="tiles">
+      <div class="tile"><span>Sökord i katalogen</span><b class="num">${all.length}</b><span>${all.reduce((s, x) => s + dataCount(x.t), 0).toLocaleString('sv-SE')} annonser analyserade</span></div>
+      <div class="tile"><span>Värda att leta efter</span><b class="num">${withV.filter(x => x.v.max >= 50).length}</b><span>maxpris minst 50 kr</span></div>
+      <div class="tile"><span>Senaste fulla scrape</span><b class="num">${last ? when(last) : '–'}</b><span>${last ? new Date(last).toLocaleString('sv-SE', { dateStyle: 'medium', timeStyle: 'short' }) : ''}</span></div>
+      <div class="tile"><span>Fotade varor</span><b class="num">${S.fynd.length}</b><span>${S.pending.length ? S.pending.length + ' scrapas nu' : 'från appens kamera'}</span></div>
+    </div>
+    <div class="panel"><div class="spread"><h3>Högst maxpris i butiken</h3><span class="muted small">Så mycket kan du betala och ändå klara kravet</span></div>${bars(top, topMax, x => x.v.max, x => x.t.q, x => kr(x.v.max))}</div>
+    <div class="panel"><h3>Per kategori (median maxpris)</h3>${bars(byCat, catMax, x => x.med, x => x.c, x => kr(x.med))}
+      <div class="muted small">${byCat.map(x => `${esc(x.c)}: ${x.good} av ${x.n} sökord har maxpris över 100 kr`).join(' · ')}</div></div>
+    <div class="panel"><div class="spread"><h3>Säljer snabbast på Blocket</h3><span class="muted small">Hur länge annonserna ligger (median)</span></div>
+      <div class="scroll-x"><table class="table"><thead><tr><th>Sökord</th><th class="r">Ligger ute</th><th class="r">Säljs för</th><th class="r">Max i butik</th></tr></thead><tbody>
+      ${fast.map(x => `<tr data-open="${esc(x.t.id)}" style="cursor:pointer"><td style="text-transform:capitalize">${esc(x.t.q)}</td><td class="r">${Math.round(x.sp.rank)} d</td><td class="r">${x.v ? kr(x.v.resale) : '–'}</td><td class="r">${x.v ? kr(x.v.max) : '–'}</td></tr>`).join('')}</tbody></table></div></div>
+    ${gap.length ? `<div class="panel"><div class="spread"><h3>Störst glapp Blocket mot Tradera</h3><span class="muted small">Stort glapp: sälj på Blocket och ha tålamod</span></div>
+      <div class="scroll-x"><table class="table"><thead><tr><th>Sökord</th><th class="r">Tradera</th><th class="r">Blocket</th><th class="r">Glapp</th></tr></thead><tbody>
+      ${gap.map(x => `<tr data-open="${esc(x.t.id)}" style="cursor:pointer"><td style="text-transform:capitalize">${esc(x.t.q)}</td><td class="r">${kr(x.v.tv)}</td><td class="r">${kr(x.t.blocket.stats.med)}</td><td class="r">x${x.ratio.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+}
+
+// ---------- vy: Inställningar ----------
+function renderSettings() {
+  const el = $('#v-installningar'); const c = S.cfg;
+  const terms = [...S.terms.values()].sort((a, b) => a.cat.localeCompare(b.cat, 'sv') || a.q.localeCompare(b.q, 'sv'));
+  const tokenUrl = `https://github.com/settings/personal-access-tokens/new?name=Thriftkollen%20mobil&description=Skicka%20foton%20fr%C3%A5n%20appen&contents=write&actions=write`;
+  el.innerHTML = `
+    <form class="panel" id="ghForm">
+      <h2>GitHub-anslutning</h2>
+      <p class="muted small">Nyckeln behövs för att skicka foton, ändra sökord och starta scrapes. Den sparas bara på den här enheten.</p>
+      <ol class="steps small">
+        <li>Öppna <a href="${tokenUrl}" target="_blank" rel="noopener">Ny nyckel på GitHub ↗</a>.</li>
+        <li>Under <b>Repository access</b>: välj <b>Only select repositories</b> och <b>${esc(gh.repo || 'thriftkollen')}</b>.</li>
+        <li>Under <b>Permissions</b>: <b>Contents</b> = Read and write, <b>Actions</b> = Read and write.</li>
+        <li>Skapa nyckeln, kopiera den och klistra in här.</li>
+      </ol>
+      <div class="form-grid">
+        <div class="field"><label for="g-owner">GitHub-användare</label><input id="g-owner" type="text" value="${esc(gh.owner)}" autocapitalize="off"></div>
+        <div class="field"><label for="g-repo">Repo</label><input id="g-repo" type="text" value="${esc(gh.repo)}" autocapitalize="off"></div>
+        <div class="field" style="grid-column:1/-1"><label for="g-token">Nyckel</label><input id="g-token" type="password" value="${esc(gh.token)}" autocomplete="off" placeholder="github_pat_…"></div>
+      </div>
+      <div class="row"><button class="btn primary" type="submit">Spara och testa</button><span class="muted small" id="ghStatus"></span></div>
+    </form>
+    <div class="panel">
+      <h2>Full scrape</h2>
+      <p class="muted small">Körs automatiskt måndag och torsdag kl 06. Starta en extra körning här. Den tar 6–10 minuter på GitHub.${S.meta && S.meta.generatedAt ? ` Senast: ${when(S.meta.generatedAt)}.` : ''}</p>
+      <div class="row"><button class="btn primary" id="runScrape" ${gh.token ? '' : 'disabled'}>Kör full scrape nu</button>
+        <a class="btn" target="_blank" rel="noopener" href="https://github.com/${esc(gh.owner)}/${esc(gh.repo)}/actions">Se körningar ↗</a>
+        <button class="btn" id="reload">Hämta senaste data</button></div>
+    </div>
+    <form class="panel" id="cfgForm">
+      <h2>Dina regler</h2>
+      <div class="form-grid">
+        <div class="field"><label for="c-minProfit">Minsta vinst (kr)</label><input id="c-minProfit" type="number" min="0" value="${c.minProfit}"></div>
+        <div class="field"><label for="c-minMult">Minsta multipel (x)</label><input id="c-minMult" type="number" min="1" step="0.1" value="${c.minMult}"></div>
+        <div class="field"><label for="c-mode">Krav</label><select id="c-mode"><option value="any" ${c.mode === 'any' ? 'selected' : ''}>Ett av kraven räcker</option><option value="all" ${c.mode === 'all' ? 'selected' : ''}>Båda kraven</option></select></div>
+        <div class="field"><label for="c-valuation">Värdering</label><select id="c-valuation">${[['safe', 'Försiktig (Tradera)'], ['bal', 'Balanserad (snitt)'], ['opt', 'Optimistisk (högsta)']].map(([k, l]) => `<option value="${k}" ${c.valuation === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label for="c-platform">Räkna avgift för</label><select id="c-platform">${[['tradera', 'Tradera'], ['blocket', 'Blocket'], ['fb', 'FB Marketplace']].map(([k, l]) => `<option value="${k}" ${c.platform === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label for="c-haggle">Prutmån Blocket (%)</label><input id="c-haggle" type="number" min="0" max="80" value="${c.haggle}"></div>
+        <div class="field"><label for="c-traderaPct">Tradera-provision (%)</label><input id="c-traderaPct" type="number" min="0" step="0.5" value="${c.traderaPct}"></div>
+        <div class="field"><label for="c-traderaCap">Tradera-tak (kr)</label><input id="c-traderaCap" type="number" min="0" value="${c.traderaCap}"></div>
+        <div class="field"><label for="c-blocketFee">Blocket-avgift (kr)</label><input id="c-blocketFee" type="number" min="0" value="${c.blocketFee}"></div>
+      </div>
+      <p class="muted small">Maxpriset: uppskattat säljpris minus avgift ger det du får ut. Sedan tas det högsta (med ”båda kraven”: lägsta) inköpspris som ger ${kr(c.minProfit)} vinst eller x${c.minMult}. Blocket-priser är utropspriser, så prutmånen dras av först. Tradera visar även osålda auktioner, vilket gör Tradera-siffran något försiktig.</p>
+      <div class="row"><button class="btn primary" type="submit">Spara regler</button><button class="btn" type="button" id="cfgReset">Återställ standard</button></div>
+    </form>
+    <div class="panel">
+      <h2>Sökord (${terms.length})</h2>
+      <p class="muted small">Nya sökord sparas i repot och scrapas direkt.</p>
+      <form class="form-grid" id="termForm">
+        <div class="field"><label for="t-q">Sökord</label><input id="t-q" type="text" required placeholder="t.ex. bodum kaffebryggare"></div>
+        <div class="field"><label for="t-cat">Kategori</label><select id="t-cat">${CATS.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
+        <div class="field"><label for="t-must">Måste stå i rubriken (valfritt)</label><input id="t-must" type="text" placeholder="t.ex. bodum"></div>
+        <button class="btn primary" type="submit" ${gh.token ? '' : 'disabled'}>Lägg till och scrapa</button>
+      </form>
+      <div class="scroll-x"><table class="table"><thead><tr><th>Sökord</th><th>Kategori</th><th class="r">Annonser</th><th></th></tr></thead><tbody>
+        ${terms.map(t => `<tr><td style="text-transform:capitalize">${esc(t.q)}${t.source === 'foto' ? ' <span class="pill">foto</span>' : ''}</td><td class="muted">${esc(t.cat)}</td><td class="r">${dataCount(t)}</td>
+          <td class="r"><button class="btn small danger" data-delterm="${esc(t.id)}" ${gh.token ? '' : 'disabled'}>${S.confirm === 'term:' + t.id ? 'Säker?' : 'Ta bort'}</button></td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>Säkerhetskopia av lagret</h2>
+      <p class="muted small">Lagret ligger bara på den här enheten. Spara en kopia, eller flytta det till en annan telefon.</p>
+      <div class="row"><button class="btn" id="invExport">Spara kopia</button><button class="btn" id="invImportBtn">Läs in kopia</button></div>
+    </div>
+    <div class="note small">Facebook Marketplace scrapas inte, eftersom det kräver inloggning och Meta förbjuder det. Använd länken ”FB Marketplace ↗” för att jämföra manuellt.</div>`;
+}
+
+// ---------- render ----------
+function render() {
+  const st = $('#status');
+  st.textContent = S.state === 'loading' ? 'Laddar…' : S.state === 'error' ? 'Kunde inte läsa data' : `${S.terms.size} sökord${S.meta && S.meta.generatedAt ? ' · data ' + when(S.meta.generatedAt) : ''}`;
+  const dot = $('#pendingDot'); dot.hidden = !S.pending.length; dot.textContent = S.pending.length;
+  document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === S.tab ? 'page' : 'false'));
+  document.querySelectorAll('section[data-view]').forEach(s => s.hidden = s.dataset.view !== S.tab);
+  const active = document.activeElement && document.activeElement.id;
+  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, statistik: renderStats, installningar: renderSettings })[S.tab]();
+  renderSheet();
+  if (active && !['q', 'price'].includes(active)) { const e = document.getElementById(active); if (e && e.focus) e.focus(); }
+}
+
+// ---------- händelser ----------
+let qTimer;
+$('#q').addEventListener('input', e => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.q = e.target.value.trim(); if (S.tab !== 'fynd') location.hash = 'fynd'; else render(); }, 150); });
+$('#price').addEventListener('input', e => { const v = e.target.value === '' ? null : Math.max(0, +e.target.value); S.price = isFinite(v) ? v : null; render(); });
+$('#photoInput').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; onPhotoChosen(f); });
+$('#photoPick').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; onPhotoChosen(f); });
+$('#invImport').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { const d = JSON.parse(await f.text()); if (!Array.isArray(d)) throw 0; S.inv = d; saveInv(); render(); toast(`Läste in ${d.length} saker.`); } catch { toast('Det där är ingen lagerkopia.'); }
+});
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
+  if (!t) return;
+  if (t.dataset.close && (e.target === t || t.tagName === 'BUTTON')) { S.open = null; renderSheet(); return; }
+  if (t.dataset.cat) { S.cat = t.dataset.cat; store.set('tk-cat', S.cat); render(); return; }
+  if (t.dataset.open) { S.open = t.dataset.open; renderSheet(); return; }
+  if (t.dataset.photo === 'camera') { $('#photoInput').click(); return; }
+  if (t.dataset.photo === 'pick') { $('#photoPick').click(); return; }
+  if (t.dataset.photo === 'clear') { S.photo = null; render(); return; }
+  if (t.dataset.buy != null) {
+    const name = t.dataset.buy, price = t.dataset.buyprice ? S.fyndPrice[t.dataset.buyprice] : S.price;
+    S.open = null; location.hash = 'lager'; S.tab = 'lager'; render();
+    $('#invName').value = name; $('#invBuy').value = price ?? ''; $('#invBuy').focus(); return;
+  }
+  if (t.dataset.delinv) {
+    const k = 'inv:' + t.dataset.delinv;
+    if (S.confirm !== k) { S.confirm = k; render(); return; }
+    S.confirm = null; S.inv = S.inv.filter(i => i.id !== t.dataset.delinv); saveInv(); render(); toast('Borttagen'); return;
+  }
+  if (t.dataset.delterm) {
+    const id = t.dataset.delterm, k = 'term:' + id;
+    if (S.confirm !== k) { S.confirm = k; render(); return; }
+    S.confirm = null;
+    try {
+      await updateRepoJson('data/sokord.json', arr => arr.filter(x => slug(x.q) !== id), `Ta bort sökord ${id}`);
+      S.terms.delete(id); render(); toast('Sökordet är borttaget. Det försvinner ur katalogen vid nästa scrape.');
+    } catch (err) { toast('Kunde inte ta bort: ' + err.message); }
+    return;
+  }
+  if (t.id === 'runScrape') { try { await dispatchScrape(); toast('Full scrape startad på GitHub. Den tar 6–10 minuter.'); } catch (err) { toast('Kunde inte starta: ' + err.message); } return; }
+  if (t.id === 'reload') { await loadData(); toast('Datan är uppdaterad.'); return; }
+  if (t.id === 'cfgReset') { S.cfg = { ...DEFAULT_CFG }; store.set('tk-settings', S.cfg); render(); toast('Reglerna är återställda'); return; }
+  if (t.id === 'invExport') {
+    const blob = new Blob([JSON.stringify(S.inv, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `thriftkollen-lager-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000); return;
+  }
+  if (t.id === 'invImportBtn') { $('#invImport').click(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.open) { S.open = null; renderSheet(); } });
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'sort') { S.sort = el.value; store.set('tk-sort', S.sort); render(); return; }
+  const item = el.closest('[data-inv]');
+  if (item && el.dataset.f) {
+    const cur = S.inv.find(i => i.id === item.dataset.inv); if (!cur) return;
+    cur[el.dataset.f] = el.type === 'number' ? (el.value === '' ? null : +el.value) : el.value;
+    if (el.dataset.f === 'status' && el.value === 'sold' && !cur.soldAt) cur.soldAt = new Date().toISOString().slice(0, 10);
+    saveInv(); render();
+  }
+});
+let sTimer;
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'sheetPrice') { S.price = el.value === '' ? null : +el.value; $('#price').value = el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { render(); const sp = $('#sheetPrice'); if (sp) sp.focus(); }, 300); }
+  if (el.dataset.fprice) { const id = el.dataset.fprice; S.fyndPrice[id] = el.value === '' ? null : +el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { render(); const f = document.getElementById('fp-' + id); if (f) { f.focus(); } }, 400); }
+});
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.id === 'photoForm') { sendPhoto(); return; }
+  if (f.id === 'invForm') {
+    const name = $('#invName').value.trim(), buy = +$('#invBuy').value;
+    if (!name || !isFinite(buy)) return;
+    const term = [...S.terms.values()].find(t => norm(t.q) === norm(name)) || [...S.terms.values()].map(t => [t, matches(t, name)]).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).map(([t]) => t)[0];
+    S.inv.push({ id: Date.now().toString(36), name, buy, boughtAt: $('#invDate').value || new Date().toISOString().slice(0, 10), status: 'stock', platform: '', termId: term ? term.id : null, soldPrice: null, soldAt: null });
+    saveInv(); render(); toast('Lagt i lagret'); return;
+  }
+  if (f.id === 'cfgForm') {
+    const num = (id, d) => { const v = +$('#c-' + id).value; return isFinite(v) ? v : d; };
+    S.cfg = { ...S.cfg, minProfit: num('minProfit', 100), minMult: Math.max(1, num('minMult', 2)), mode: $('#c-mode').value, valuation: $('#c-valuation').value, platform: $('#c-platform').value,
+      haggle: num('haggle', 20), traderaPct: num('traderaPct', 10), traderaCap: num('traderaCap', 200), blocketFee: num('blocketFee', 0) };
+    store.set('tk-settings', S.cfg); render(); toast('Reglerna är sparade'); return;
+  }
+  if (f.id === 'ghForm') {
+    gh.owner = $('#g-owner').value.trim(); gh.repo = $('#g-repo').value.trim(); gh.token = $('#g-token').value.trim();
+    store.set('tk-github', { owner: gh.owner, repo: gh.repo, token: gh.token });
+    const st = $('#ghStatus'); st.textContent = 'Testar…';
+    try {
+      const r = await api(repoPath(''));
+      const ok = r.permissions && r.permissions.push;
+      st.textContent = ok ? 'Ansluten. Nyckeln kan skicka foton.' : 'Ansluten, men nyckeln saknar skrivrätt.';
+      render(); $('#ghStatus').textContent = st.textContent; loadData(true);
+    } catch (err) { st.textContent = err.status === 401 ? 'Nyckeln godtogs inte.' : err.status === 404 ? 'Hittar inte repot (eller nyckeln har inte tillgång till det).' : 'Fel: ' + err.message; }
+    return;
+  }
+  if (f.id === 'termForm') {
+    const q = $('#t-q').value.trim(); if (!q) return;
+    const id = slug(q); if (!id) return;
+    if (S.terms.has(id)) { toast('Det sökordet finns redan.'); return; }
+    try {
+      await updateRepoJson('data/sokord.json', arr => arr.concat([{ q, cat: $('#t-cat').value, ...($('#t-must').value.trim() ? { must: $('#t-must').value.trim() } : {}) }]), `Nytt sökord: ${q}`);
+      await dispatchScrape().catch(() => {});
+      toast('Sökordet är sparat. En scrape har startat.');
+      f.reset();
+    } catch (err) { toast('Kunde inte spara: ' + err.message); }
+  }
+});
+function route() { const h = location.hash.replace('#', ''); S.tab = TABS.includes(h) ? h : 'fynd'; S.confirm = null; render(); }
+window.addEventListener('hashchange', route);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.state !== 'loading') loadData(true); });
+
+route();
+loadData(true).then(schedulePoll);
+})();
+</script>
+</body>
+</html>

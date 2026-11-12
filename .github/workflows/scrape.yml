@@ -1,0 +1,60 @@
+name: Scrape
+
+on:
+  # Ett nytt foto från appen hamnar i queue/ och startar en körning direkt.
+  push:
+    paths:
+      - 'queue/**'
+  # Knappen "Kör full scrape" i appen, eller Actions-fliken på GitHub.
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Kör full scrape av alla sökord'
+        type: boolean
+        default: true
+  # Full scrape varje måndag och torsdag kl 06 svensk tid.
+  schedule:
+    - cron: '0 5 * * 1,4'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Identifiera och scrapa nya foton
+        shell: powershell
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: .\scripts\process-queue.ps1
+
+      - name: Full scrape
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full)
+        shell: powershell
+        run: .\scripts\scrape.ps1
+
+      - name: Spara resultatet i repot
+        shell: powershell
+        run: |
+          git config user.name "thriftkollen-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data queue
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "Data $(Get-Date -Format 'yyyy-MM-dd HH:mm') ($env:GITHUB_EVENT_NAME)"
+            for ($i = 0; $i -lt 3; $i++) {
+              git pull --rebase
+              git push
+              if ($LASTEXITCODE -eq 0) { break }
+              Start-Sleep -Seconds 5
+            }
+          } else { Write-Host 'Inget nytt att spara.' }
+          exit 0
