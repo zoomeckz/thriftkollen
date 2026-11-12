@@ -181,7 +181,9 @@ function Invoke-Watch($w, [string]$inFile, [string]$outFile, [int]$keepGoneDays)
     if (-not $state.capped -and $w.conditions -ne $false) {
       foreach ($cond in 1..5) {
         $p2 = $params.Clone(); $p2['condition'] = $cond
-        $tag = { param($d, $region) $id = [string]$d.ad_id; if ($rows.ContainsKey($id)) { $rows[$id][$C.cond] = $cond } }.GetNewClosure()
+        # GetNewClosure fångar bara variabler i den här funktionen, inte skriptets (som $C). Kopiera in dem.
+        $condIx = [int]$C.cond; $rowsRef = $rows
+        $tag = { param($d, $region) $id = [string]$d.ad_id; if ($rowsRef.ContainsKey($id)) { $rowsRef[$id][$condIx] = $cond } }.GetNewClosure()
         $st2 = @{ truncated = $false; capped = $false }
         Invoke-Collect $p2 '' $st2 $tag
       }
