@@ -7,6 +7,12 @@
 param([int]$DelayMs = 800)
 . (Join-Path $PSScriptRoot 'lib.ps1')
 
+# Modell för bildigenkänningen. Sonnet 5.5 kostar ungefär hälften av Opus 5.5 och är nästan lika bra på märken och modeller.
+$Model = 'claude-sonnet-5-5'
+# Listpris i USD per miljon tokens [in, ut]. Används bara för att visa kostnaden per foto i appen.
+$Prices = @{ 'claude-sonnet-5-5' = @(2.0, 10.0); 'claude-sonnet-5' = @(2.0, 10.0); 'claude-opus-5-5' = @(4.0, 20.0); 'claude-haiku-5-5' = @(0.10, 0.50) }
+$UsdSek = 10.5   # ungefärlig växelkurs
+
 $queueDir = Join-Path $RepoRoot 'queue'
 $jobs = @(Get-ChildItem -Path $queueDir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)
 if (-not $jobs.Count) { Write-Host 'Inga foton i kön.'; return }
@@ -66,7 +72,7 @@ Fält:
     }
   }
   $req = [ordered]@{
-    model = 'claude-opus-5-5'
+    model = $Model
     max_tokens = 8000
     fallbacks = 'default'
     output_config = [ordered]@{ effort = 'low'; format = [ordered]@{ type = 'json_schema'; schema = $schema } }
@@ -90,6 +96,13 @@ Fält:
   if (-not $txt) { throw "Tomt svar från Claude (stop_reason: $($r.stop_reason))." }
   $ai = $txt | ConvertFrom-Json
   $ai | Add-Member -NotePropertyName model_used -NotePropertyValue $r.model -Force
+  # Kostnad: tokens gånger listpris för modellen som faktiskt svarade (en reservmodell kan ha tagit över).
+  $price = $Prices[[string]$r.model]; if (-not $price) { $price = $Prices[$Model] }
+  $inTok = [int]$r.usage.input_tokens + [int]$r.usage.cache_creation_input_tokens + [int]$r.usage.cache_read_input_tokens
+  $outTok = [int]$r.usage.output_tokens
+  $usd = ($inTok * $price[0] + $outTok * $price[1]) / 1e6
+  $ai | Add-Member -NotePropertyName usage -NotePropertyValue ([ordered]@{ input = $inTok; output = $outTok; usd = [math]::Round($usd, 5); sek = [math]::Round($usd * $UsdSek, 3) }) -Force
+  Write-Host ("   Claude: {0} in / {1} ut = {2:N2} kr" -f $inTok, $outTok, ($usd * $UsdSek))
   return $ai
 }
 

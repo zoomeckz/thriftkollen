@@ -21,7 +21,7 @@ Appen visar vad som lönar sig att plocka med sig och hur mycket du högst kan b
 
 1. Du tar en bild i appen och skriver valfritt vad det är.
 2. Appen laddar upp bilden till `uploads/` och en beställning till `queue/`.
-3. Actions startar. Claude (`claude-opus-5-5`) tittar på bilden och tar fram märke, modell och sökord.
+3. Actions startar. Claude (`claude-sonnet-5-5`) tittar på bilden och tar fram märke, modell och sökord.
 4. Scrapern hämtar samma märke/modell och varutypen i stort från Blocket och Tradera.
 5. Resultatet sparas i `data/fynd.json`, och varutypen läggs till som sökord i katalogen.
 6. Appen märker att det är klart och visar jämförelsen. Det tar oftast 2–4 minuter.
@@ -45,4 +45,4 @@ Det är reserv ifall Blocket eller Tradera skulle blockera GitHubs servrar.
 - Repot är publikt. Prisdata och foton syns för alla som hittar det. Lagret (dina köp) sparas bara i mobilen.
 - Tradera-avgiften är satt till 10 %, max 200 kr. Det går att ändra i appen.
 - Facebook Marketplace scrapas inte, eftersom det kräver inloggning och Meta förbjuder det.
-- Bildigenkänningen kostar ungefär 20–40 öre per bild i API-avgift.
+- Bildigenkänningen kostar ungefär 10–15 öre per bild i API-avgift. Den faktiska kostnaden visas per foto i appen och totalt under Statistik.

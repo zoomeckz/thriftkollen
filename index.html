@@ -20,7 +20,7 @@
   --tradera: #C98F00; --blocket: #1F4FD1;
   --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --r: 10px; color-scheme: light;
+  --r: 14px; color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -37,37 +37,46 @@
   --tradera: #F2C52E; --blocket: #7EA0FF; color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+html { padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15.5px; line-height: 1.5; -webkit-text-size-adjust: 100%; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
 a { color: var(--accent); }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; }
-.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
 
-header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
-.top .wrap { display: grid; gap: 10px; padding-block: 12px 0; }
-.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-stretch: 80%; font-size: 1.6rem; letter-spacing: -0.01em; text-transform: uppercase; }
-.brand h1 span { background: var(--tag); color: var(--tag-ink); padding: 0 .3em; margin-left: .1em; }
-.brand small { color: var(--muted); font-size: .8rem; text-align: right; }
-.quick { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem; gap: 8px; }
+/* Toppmenyn: en smal list som alltid syns. Menyn fälls ut över innehållet i stället för att trycka ner det. */
+header.top { position: fixed; top: 0; left: 0; right: 0; z-index: 15; padding-top: env(safe-area-inset-top, 0px); background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar { display: flex; align-items: center; gap: 10px; height: 56px; }
+.logo { margin: 0; flex: 0 0 auto; font-family: var(--font-display); font-weight: 800; font-stretch: 80%; font-size: 1.35rem; letter-spacing: -0.01em; text-transform: uppercase; line-height: 1; }
+.logo span { background: var(--tag); color: var(--tag-ink); padding: 0 .25em; margin-left: .08em; }
+.bar-info { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; background: none; border: 0; padding: 6px 0; cursor: pointer; text-align: left; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.bar-info #tabName { overflow: hidden; text-overflow: ellipsis; }
+.price-chip { background: var(--tag); color: var(--tag-ink); }
+.menu-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); font-weight: 600; cursor: pointer; }
+.burger { display: grid; gap: 3px; width: 16px; }
+.burger i { display: block; height: 2px; border-radius: 2px; background: currentColor; transition: transform .2s, opacity .2s; }
+.menu-btn[aria-expanded="true"] .burger i:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+.menu-btn[aria-expanded="true"] .burger i:nth-child(2) { opacity: 0; }
+.menu-btn[aria-expanded="true"] .burger i:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+.drawer { position: absolute; left: 0; right: 0; top: 100%; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: 0 18px 40px rgb(0 0 0 / .28); max-height: calc(100vh - 80px); overflow-y: auto; }
+.drawer-in { display: grid; gap: 14px; padding-block: 14px 16px; }
+.quick { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem; gap: 10px; }
 .field { display: grid; gap: 4px; min-width: 0; }
 .field label, .lbl { font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 input[type=text], input[type=number], input[type=search], input[type=date], input[type=password], select, textarea {
   width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 16px;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-nav.tabs a { flex: 0 0 auto; padding: 10px 12px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: .92rem; border-bottom: 3px solid transparent; }
-nav.tabs a[aria-current="page"] { color: var(--ink); border-color: var(--accent); }
-nav.tabs a .dot { display: inline-block; min-width: 1.3em; padding: 0 .35em; margin-left: 4px; border-radius: 999px; background: var(--tag); color: var(--tag-ink); font-size: .72rem; text-align: center; }
+nav.tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
+nav.tabs a { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 10px; text-decoration: none; color: var(--ink); font-weight: 600; font-size: .95rem; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+nav.tabs a[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+nav.tabs a .dot { display: inline-block; min-width: 1.4em; padding: 0 .35em; border-radius: 999px; background: var(--tag); color: var(--tag-ink); font-size: .72rem; text-align: center; }
 
-main { padding-block: 18px 60px; }
-section[data-view] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+main { padding-top: calc(56px + env(safe-area-inset-top, 0px) + 22px); padding-bottom: 72px; }
+section[data-view] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 h2 { font-family: var(--font-display); font-stretch: 85%; font-weight: 800; font-size: 1.35rem; margin: 0; text-wrap: balance; }
 h3 { font-family: var(--font-display); font-stretch: 90%; font-weight: 700; font-size: 1.05rem; margin: 0; }
 p { margin: 0; }
@@ -85,22 +94,22 @@ p { margin: 0; }
 .btn.small { padding: 6px 10px; font-size: .85rem; }
 .btn[disabled] { opacity: .5; cursor: default; }
 .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-.chip { flex: 0 0 auto; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: .88rem; font-weight: 500; }
+.chip { flex: 0 0 auto; padding: 8px 15px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: .88rem; font-weight: 500; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 18px; display: grid; gap: 16px; min-width: 0; }
 .note { padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); font-size: .92rem; }
 .note.warn { background: var(--warn-bg); }
 .note.bad { background: var(--bad-bg); color: var(--bad); }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; display: grid; grid-template-rows: auto 1fr; cursor: pointer; text-align: left; padding: 0; position: relative; }
 .card:hover { border-color: var(--muted); }
 .thumbs { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 2px; aspect-ratio: 16 / 9; background: var(--surface-2); max-width: 100%; overflow: hidden; }
 .thumbs img { width: 100%; height: 100%; min-height: 0; object-fit: cover; display: block; }
 .thumbs img:first-child { grid-row: 1 / 3; }
 .thumbs .ph { display: grid; place-items: center; color: var(--muted); font-size: .8rem; grid-column: 1 / -1; grid-row: 1 / -1; }
-.card .body { padding: 12px; display: grid; gap: 8px; align-content: start; }
+.card .body { padding: 14px 16px 16px; display: grid; gap: 10px; align-content: start; }
 .card .name { font-family: var(--font-display); font-weight: 700; font-stretch: 88%; font-size: 1.12rem; line-height: 1.15; text-transform: capitalize; }
 .meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: .78rem; }
 .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: .75rem; }
@@ -151,13 +160,13 @@ p { margin: 0; }
 .table th { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .table td.r, .table th.r { text-align: right; font-variant-numeric: tabular-nums; }
 .scroll-x { overflow-x: auto; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 2px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 2px; }
 .tile b { font-family: var(--font-display); font-weight: 800; font-stretch: 82%; font-size: 1.7rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .tile span { font-size: .78rem; color: var(--muted); }
 .pos { color: var(--good); } .neg { color: var(--bad); }
 .inv { display: grid; gap: 8px; }
-.inv-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+.inv-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
 .inv-item .controls { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .inv-item .title { font-weight: 600; text-transform: capitalize; }
 .bar { height: 10px; border-radius: 3px; background: var(--accent); }
@@ -174,8 +183,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .shot img.photo { width: 120px; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
 .preview { width: 100%; max-height: 320px; object-fit: contain; border-radius: 8px; background: var(--surface-2); }
 .fynd { display: grid; gap: 12px; }
-.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
-.cmp { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; cursor: pointer; background: var(--bg); text-align: left; }
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.cmp { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; cursor: pointer; background: var(--bg); text-align: left; }
 .cmp:hover { border-color: var(--muted); }
 .cmp .mini { display: flex; gap: 4px; overflow: hidden; }
 .cmp .mini img { width: 54px; height: 54px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
@@ -184,9 +193,13 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 
 @media (max-width: 480px) {
   .quick { grid-template-columns: minmax(0, 1fr) 7.5rem; }
+  .menu-btn #menuLabel { display: none; }
+  .menu-btn { padding: 10px 12px; }
+  .panel { padding: 18px 16px; }
+  .sheet-head h2 { font-size: 1.4rem; }
   .grid { grid-template-columns: minmax(0, 1fr); }
-  .card { grid-template-columns: 112px minmax(0, 1fr); grid-template-rows: none; }
-  .card .thumbs { aspect-ratio: auto; height: 100%; min-height: 112px; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .card { grid-template-columns: 118px minmax(0, 1fr); grid-template-rows: none; }
+  .card .thumbs { aspect-ratio: auto; height: 100%; min-height: 136px; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   .card .thumbs img:not(:first-child) { display: none; }
   .card .thumbs img:first-child { grid-row: auto; }
   .card .verdict { grid-column: 1 / -1; }
@@ -198,29 +211,39 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <div class="brand">
-      <h1>Thrift<span>kollen</span></h1>
-      <small id="status">Laddar…</small>
-    </div>
-    <div class="quick">
-      <div class="field">
-        <label for="q">Vad hittade du?</label>
-        <input id="q" type="search" placeholder="t.ex. mon amie, game boy, kånken" autocomplete="off" enterkeyhint="search">
+<header class="top" id="top">
+  <div class="wrap topbar">
+    <h1 class="logo">Thrift<span>kollen</span></h1>
+    <button class="bar-info" id="barInfo" type="button" aria-label="Öppna menyn">
+      <span id="tabName">Katalog</span>
+      <span class="pill" id="queryChip" hidden></span>
+      <span class="pill price-chip" id="priceChip" hidden></span>
+    </button>
+    <button class="menu-btn" id="menuToggle" type="button" aria-expanded="false" aria-controls="drawer">
+      <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span><span id="menuLabel">Meny</span>
+    </button>
+  </div>
+  <div class="drawer" id="drawer" hidden>
+    <div class="wrap drawer-in">
+      <div class="quick">
+        <div class="field">
+          <label for="q">Vad hittade du?</label>
+          <input id="q" type="search" placeholder="t.ex. mon amie, game boy, kånken" autocomplete="off" enterkeyhint="search">
+        </div>
+        <div class="field">
+          <label for="price">Pris i butiken</label>
+          <input id="price" type="number" inputmode="numeric" min="0" step="5" placeholder="kr">
+        </div>
       </div>
-      <div class="field">
-        <label for="price">Pris i butiken</label>
-        <input id="price" type="number" inputmode="numeric" min="0" step="5" placeholder="kr">
-      </div>
+      <nav class="tabs" aria-label="Vyer">
+        <a href="#fynd" data-tab="fynd">Katalog</a>
+        <a href="#foto" data-tab="foto">Fota<span class="dot" id="pendingDot" hidden></span></a>
+        <a href="#lager" data-tab="lager">Lager</a>
+        <a href="#statistik" data-tab="statistik">Statistik</a>
+        <a href="#installningar" data-tab="installningar">Inställningar</a>
+      </nav>
+      <small class="muted" id="status">Laddar…</small>
     </div>
-    <nav class="tabs" aria-label="Vyer">
-      <a href="#fynd" data-tab="fynd">Katalog</a>
-      <a href="#foto" data-tab="foto">Fota<span class="dot" id="pendingDot" hidden></span></a>
-      <a href="#lager" data-tab="lager">Lager</a>
-      <a href="#statistik" data-tab="statistik">Statistik</a>
-      <a href="#installningar" data-tab="installningar">Inställningar</a>
-    </nav>
   </div>
 </header>
 
@@ -537,9 +560,10 @@ function fyndHTML(f) {
   if (f.status === 'fel') return `<div class="panel"><div class="shot">${photo}<div class="fynd"><h3>${esc(f.text || 'Foto')}</h3><div class="note bad">${esc(f.message || 'Något gick fel.')}</div>
     <div class="row muted small">${when(f.processedAt)} ${retry}</div></div></div></div>`;
   const conf = { low: 'osäker', medium: 'ganska säker', high: 'säker' }[ai.confidence] || '';
+  const cost = ai.usage && ai.usage.sek != null ? `<span class="pill" title="${esc(ai.model_used)}: ${ai.usage.input} tokens in, ${ai.usage.output} ut">AI ${ai.usage.sek.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} kr</span>` : '';
   return `<div class="panel"><div class="shot">${photo}<div class="fynd">
       <div><div class="lbl">${esc(ai.category || '')} · ${when(f.processedAt)}</div><h3 style="font-size:1.25rem">${esc(ai.name || f.text)}</h3>
-        <div class="meta" style="margin-top:4px">${ai.brand ? `<span class="pill">${esc(ai.brand)}${ai.model ? ' ' + esc(ai.model) : ''}</span>` : ''}${conf ? `<span class="pill">AI: ${conf}</span>` : ''}${f.text ? `<span class="pill">Din text: ${esc(f.text)}</span>` : ''}</div></div>
+        <div class="meta" style="margin-top:4px">${ai.brand ? `<span class="pill">${esc(ai.brand)}${ai.model ? ' ' + esc(ai.model) : ''}</span>` : ''}${conf ? `<span class="pill">AI: ${conf}</span>` : ''}${cost}${f.text ? `<span class="pill">Din text: ${esc(f.text)}</span>` : ''}</div></div>
       ${ai.notes ? `<p class="muted small">${esc(ai.notes)}</p>` : ''}
       ${f.message ? `<div class="note warn small">${esc(f.message)}</div>` : ''}
       <div class="field" style="max-width:11rem"><label for="fp-${esc(f.id)}">Pris i butiken</label><input id="fp-${esc(f.id)}" data-fprice="${esc(f.id)}" type="number" inputmode="numeric" min="0" step="5" value="${S.fyndPrice[f.id] ?? ''}" placeholder="kr"></div>
@@ -672,6 +696,8 @@ function renderStats() {
       <div class="tile"><span>Värda att leta efter</span><b class="num">${withV.filter(x => x.v.max >= 50).length}</b><span>maxpris minst 50 kr</span></div>
       <div class="tile"><span>Senaste fulla scrape</span><b class="num">${last ? when(last) : '–'}</b><span>${last ? new Date(last).toLocaleString('sv-SE', { dateStyle: 'medium', timeStyle: 'short' }) : ''}</span></div>
       <div class="tile"><span>Fotade varor</span><b class="num">${S.fynd.length}</b><span>${S.pending.length ? S.pending.length + ' scrapas nu' : 'från appens kamera'}</span></div>
+      ${(() => { const c = S.fynd.map(f => f.ai && f.ai.usage && f.ai.usage.sek).filter(x => x != null); const sum = c.reduce((a, b) => a + b, 0);
+        return `<div class="tile"><span>AI-kostnad för foton</span><b class="num">${sum.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} kr</b><span>${c.length ? 'snitt ' + (sum / c.length).toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kr per foto' : 'räknas från nästa foto'}</span></div>`; })()}
     </div>
     <div class="panel"><div class="spread"><h3>Högst maxpris i butiken</h3><span class="muted small">Så mycket kan du betala och ändå klara kravet</span></div>${bars(top, topMax, x => x.v.max, x => x.t.q, x => kr(x.v.max))}</div>
     <div class="panel"><h3>Per kategori (median maxpris)</h3>${bars(byCat, catMax, x => x.med, x => x.c, x => kr(x.med))}
@@ -752,7 +778,16 @@ function renderSettings() {
 }
 
 // ---------- render ----------
+const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', statistik: 'Statistik', installningar: 'Inställningar' };
+function setMenu(open) {
+  S.menuOpen = open; store.set('tk-menu', open);
+  $('#drawer').hidden = !open;
+  const b = $('#menuToggle'); b.setAttribute('aria-expanded', String(open)); $('#menuLabel').textContent = open ? 'Stäng' : 'Meny';
+}
 function render() {
+  $('#tabName').textContent = TAB_NAMES[S.tab] + (S.pending.length ? ` · ${S.pending.length} scrapas` : '');
+  const pc = $('#priceChip'); pc.hidden = S.price == null; pc.textContent = S.price != null ? kr(S.price) : '';
+  const qc = $('#queryChip'); qc.hidden = !S.q; qc.textContent = S.q ? `”${S.q}”` : '';
   const st = $('#status');
   st.textContent = S.state === 'loading' ? 'Laddar…' : S.state === 'error' ? 'Kunde inte läsa data' : `${S.terms.size} sökord${S.meta && S.meta.generatedAt ? ' · data ' + when(S.meta.generatedAt) : ''}`;
   const dot = $('#pendingDot'); dot.hidden = !S.pending.length; dot.textContent = S.pending.length;
@@ -886,6 +921,10 @@ function route() { const h = location.hash.replace('#', ''); S.tab = TABS.includ
 window.addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.state !== 'loading') loadData(true); });
 
+$('#menuToggle').addEventListener('click', () => { setMenu(!S.menuOpen); if (S.menuOpen) setTimeout(() => $('#q').focus({ preventScroll: true }), 50); });
+$('#barInfo').addEventListener('click', () => setMenu(!S.menuOpen));
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.target.blur(); setMenu(false); } });
+setMenu(store.get('tk-menu', false));
 route();
 loadData(true).then(schedulePoll);
 })();
