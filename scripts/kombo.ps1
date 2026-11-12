@@ -31,6 +31,7 @@ public class KTerm {
   public int TWeek;
   public int[] S;            // b10 b25 b50 b75 g50 s50 t25 t50 t75
   public int Conf, Cov;
+  public int TL, GL, Fair, Src;   // nedre gräns för medianen (Tradera, Blocket-sålda), rättvist pris, källa (1 Tradera, 2 Blocket-sålda, 4 uppskattat ur utropspris)
 }
 public class KListing { public long Id; public string T, Img, Loc; public int P, PubDay, Km; public string[] Keys; }
 
@@ -41,7 +42,7 @@ public static class Kombo {
   static HashSet<long> seenB = new HashSet<long>(), seenT = new HashSet<long>();
   public static int Today;
   static readonly Regex Word = new Regex(@"[\p{L}\p{N}]+", RegexOptions.Compiled);
-  static readonly Regex Unit = new Regex(@"^\d+(ml|cl|dl|cm|mm|m|w|kw|v|kg|g|st|l|år|kr|x|p|cl)$", RegexOptions.Compiled);
+  static readonly Regex Unit = new Regex(@"^\d+(ml|cl|dl|cm|mm|m|w|kw|v|kg|g|st|l|år|kr|x|p|gb|tb|hz|mah|tum)$", RegexOptions.Compiled);
   static readonly Regex Bad = new Regex(@"\b(köpes|sökes|söker|bytes|byte|reservdel\w*|defekt\w*|trasig\w*|fungerar ej|ej fungerande|delar till|endast kartong|tom kartong|spricka|sprucken|skadad|needs|broken|for parts)\b", RegexOptions.Compiled);
   const double HomeLat = 59.39, HomeLon = 17.905;   // Spånga
 
@@ -103,6 +104,21 @@ public static class Kombo {
     return n;
   }
 
+  public static double AskToSold = 0.85;   // kalibreras varje natt: Tradera-slutpris / Blocket-utropspris för samma varutyp
+
+  // Nedre 90 %-gräns för medianen, utan antaganden om fördelningen (ordningsstatistika + binomialfördelning).
+  // Med n sålda är minst hälften av alla försäljningar >= X(k) med 90 % säkerhet. Kräver minst 10 sålda.
+  public static int LcbMedian(List<int> s, double alpha) {
+    int n = s.Count; if (n < 10) return 0;
+    int k;
+    if (n > 200) k = (int)Math.Floor(n / 2.0 - 1.2816 * Math.Sqrt(n) / 2.0);
+    else {
+      double pmf = Math.Pow(0.5, n), cdf = 0; k = 0;
+      for (int j = 0; j < n; j++) { cdf += pmf; if (cdf > alpha) break; k = j + 1; pmf = pmf * (n - j) / (j + 1); }
+    }
+    return s[Math.Max(0, Math.Min(n - 1, k))];
+  }
+
   static int Q(List<int> s, double q) { return s.Count == 0 ? 0 : s[(int)Math.Floor((s.Count - 1) * q)]; }
 
   // Räknar fram statistik och pålitlighet. conf: 3 = Tradera och Blocket överens, 2 = Blocket med sålda (försvunna),
@@ -118,6 +134,20 @@ public static class Kombo {
       bool tOk = bOk && t.TSold.Count >= 8 && t25 > 0 && t75 <= 3.5 * t25 && t50 >= 0.55 * b50 && t50 <= 1.6 * b50;
       bool gOk = bOk && t.BGone.Count >= 8 && g50 >= 0.5 * b50 && g50 <= 1.4 * b50;
       t.Conf = !bOk ? 0 : tOk ? 3 : gOk ? 2 : t.BAct.Count >= 15 ? 1 : 0;
+      t.TL = LcbMedian(t.TSold, 0.10); t.GL = LcbMedian(t.BGone, 0.10);
+    }
+    // Kalibrering: hur mycket lägre är slutpriset på Tradera än utropspriset på Blocket, för samma varutyp?
+    var ratios = Terms.Values.Where(t => t.Conf == 3 && t.TSold.Count >= 10).Select(t => (double)t.S[7] / t.S[2]).OrderBy(x => x).ToList();
+    if (ratios.Count >= 30) AskToSold = Math.Max(0.5, Math.Min(1.0, ratios[ratios.Count / 2]));
+    // Rättvist pris = den försiktigaste av de nedre gränserna från riktiga försäljningar.
+    // Blocket-försvunna räknas ner 10 %, eftersom en del togs bort utan att säljas.
+    foreach (var t in Terms.Values) {
+      var c = new List<int>(); t.Src = 0;
+      if (t.Conf == 3 && t.TL > 0) { c.Add(t.TL); t.Src |= 1; }
+      if (t.Conf >= 2 && t.GL > 0) { c.Add((int)(t.GL * 0.9)); t.Src |= 2; }
+      if (c.Count > 0) t.Fair = c.Min();
+      else if (t.Conf >= 1) { t.Fair = (int)(t.S[2] * AskToSold * 0.85); t.Src = 4; }
+      else t.Fair = 0;
     }
     // Ett ensamt ord som nästan bara förekommer i ett visst ordpar ("cosi" i "maxi cosi") visas som ordparet.
     foreach (var kv in Terms) {
@@ -131,14 +161,13 @@ public static class Kombo {
 
   // Samma värdering som appen (standardinställningarna): snitt av Tradera-median och Blocket-pris minus 20 % prutmån.
   static double Resale(KTerm t, out double fee) {
-    double bv = (t.BGone.Count >= 8 ? t.S[4] : t.S[2]) * 0.8;
-    if (t.Conf == 3) { double r = (t.S[7] + bv) / 2; fee = Math.Min(200, Math.Max(3, r * 0.10)); return r; }
-    fee = 0; return bv;
+    fee = (t.Src & 1) != 0 ? Math.Min(200, Math.Max(3, t.Fair * 0.10)) : 0;
+    return t.Fair;
   }
   public static object[] TermRows() {
     return Terms.OrderByDescending(kv => kv.Value.BAct.Count + kv.Value.TSold.Count).Select(kv => {
       var t = kv.Value;
-      return (object)new object[] { kv.Key, t.BAct.Count, t.S[0], t.S[1], t.S[2], t.S[3], t.BGone.Count, t.S[4], t.S[5], t.TSold.Count, t.S[6], t.S[7], t.S[8], t.TWeek, t.Conf, t.Cov };
+      return (object)new object[] { kv.Key, t.BAct.Count, t.S[0], t.S[1], t.S[2], t.S[3], t.BGone.Count, t.S[4], t.S[5], t.TSold.Count, t.S[6], t.S[7], t.S[8], t.TWeek, t.Conf, t.Cov, t.TL, t.GL, t.Fair, t.Src };
     }).ToArray();
   }
   // Konkreta annonser på Blocket som ligger långt under vad varan brukar gå för.
@@ -147,7 +176,7 @@ public static class Kombo {
     foreach (var l in Active) {
       KTerm best = null; string bk = null; double bs = 0;
       foreach (var k in l.Keys) {
-        KTerm t; if (!Terms.TryGetValue(k, out t) || t.Conf == 0) continue;
+        KTerm t; if (!Terms.TryGetValue(k, out t) || t.Conf == 0 || t.Fair <= 0) continue;
         double s = t.Conf * 10 + (k.IndexOf(' ') > 0 ? 5 : 0) - (double)t.S[3] / Math.Max(1, t.S[1]);
         if (best == null || s > bs) { best = t; bk = k; bs = s; }
       }
@@ -201,6 +230,7 @@ the and for with from new size black white grey gray blue used good condition fr
 ett är kan alla mer passar endast par set sitt sina din mitt våra ute inne extra super fräsch fräscht äkta original orginal riktigt
 typ cirka lite modell märke dam herr barn unisex till salu billigt billig snabb affär bud gratis pent välvårdad välskött hel
 moms exkl finans finansiering totalvikt lastar samt köpa köp skyltexemplar demo leverans omgående lager butik
+vattentät vattentätt auktion testat otestat testad edition deluxe pro max mini plus lite planta varmvit varmvitt pla hubb utrop utropspris spel paket
 '@ -split '\s+' | Where-Object { $_ }) { [void][Kombo]::Stop.Add($w) }
 
 function Get-Cols($d) { $c = New-Object 'System.Collections.Generic.Dictionary[string,int]'; $i = 0; foreach ($x in $d['cols']) { $c[[string]$x] = $i++ }; return , $c }
@@ -225,7 +255,7 @@ if ($nB + $nT -eq 0) { Write-Host 'Ingen data, hoppar över.'; return }
 $termRows = [Kombo]::TermRows()
 $deals = [Kombo]::Deals(500)
 $day = [Kombo]::Today
-$cols = @('k', 'bN', 'b10', 'b25', 'b50', 'b75', 'gN', 'g50', 's50', 'tN', 't25', 't50', 't75', 'tW', 'conf', 'cov')
+$cols = @('k', 'bN', 'b10', 'b25', 'b50', 'b75', 'gN', 'g50', 's50', 'tN', 't25', 't50', 't75', 'tW', 'conf', 'cov', 'tL', 'gL', 'fair', 'src')
 $out = Join-Path $DbDir 'kombo'
 $now = (Get-Date).ToUniversalTime().ToString('o')
 Write-Db (Join-Path $out 'terms.json') ([ordered]@{ v = 1; day = $day; updatedAt = $now; sources = @('blocket', 'tradera'); cols = $cols; rows = $termRows }) -Fast
@@ -247,7 +277,7 @@ $oldFlip = Read-Db $totFile
 $total = [System.Collections.ArrayList]@(); if ($oldFlip -and $oldFlip['total']) { foreach ($r in $oldFlip['total']) { if ([int]$r[0] -ne $day) { [void]$total.Add($r) } } }
 [void]$total.Add(@($day, $nB, $nT, $flipTerms.Count, $deals.Count))
 Write-Db $totFile ([ordered]@{
-    v = 1; day = $day; updatedAt = $now; sources = @('blocket', 'tradera')
+    v = 2; day = $day; updatedAt = $now; sources = @('blocket', 'tradera'); askToSold = [math]::Round([Kombo]::AskToSold, 3)
     cols = $cols; terms = $flipTerms
     dealCols = @('id', 't', 'p', 'img', 'loc', 'pubDay', 'km', 'k'); deals = $deals; urlBase = 'https://www.blocket.se/recommerce/forsale/item/'
     totalCols = @('day', 'blocket', 'tradera', 'flipTerms', 'deals'); total = @($total | Sort-Object { [int]$_[0] } | Select-Object -Last $KeepDays)

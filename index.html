@@ -222,6 +222,13 @@ details.panel[open] > summary::after { content: " ▴"; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 /* Flippa */
+.flip-btn { text-decoration: none; color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.src.f { color: #C9A0FF; }
+.fb-list { display: grid; gap: 6px; }
+.fb-list a { display: flex; justify-content: space-between; gap: 10px; color: var(--ink); text-decoration: none; font-size: .85rem; }
+.fb-list a span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details.how summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+details.how p { margin: 8px 0 0; }
 .flips { display: grid; gap: 10px; }
 .flip { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
 .flip.open { border-color: var(--muted); }
@@ -246,6 +253,7 @@ details.panel[open] > summary::after { content: " ▴"; }
       <span class="pill" id="queryChip" hidden></span>
       <span class="pill price-chip" id="priceChip" hidden></span>
     </button>
+    <a class="menu-btn flip-btn" id="flipBtn" href="#flippa">Flippa</a>
     <button class="menu-btn" id="menuToggle" type="button" aria-expanded="false" aria-controls="drawer">
       <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span><span id="menuLabel">Meny</span>
     </button>
@@ -796,14 +804,15 @@ function renderStats() {
 // conf 3 = Tradera (sålda) och Blocket är överens, 2 = Blocket med sålda (försvunna) annonser, 1 = bara utropspriser på Blocket.
 const CONF = { 3: ['Säker', 'fast', 'Tradera-sålda och Blocket är överens'], 2: ['Blocket-sålda', 'mid', 'Bygger på annonser som sålts på Blocket'], 1: ['Bara utropspris', 'slow', 'Bara vad folk begär på Blocket, osäkert'], 0: ['Spretigt', 'slow', 'Priserna spretar, olika saker under samma ord'] };
 const FS = { data: null, loading: false, err: null, mode: store.get('tk-flipmode', 'typer'), max: store.get('tk-flipmax', 300), all: store.get('tk-flipall', false),
-  q: '', open: null, limit: 40, terms: null, termsLoading: false, shards: new Map() };
+  q: '', open: null, limit: 40, terms: null, termsLoading: false, shards: new Map(), fb: null };
 const fnv = s => { let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; };
 const rowObj = (cols, r) => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; };
 async function loadFlip(force) {
   if ((FS.data || FS.loading) && !force) return;
   FS.loading = true; FS.err = null;
   try {
-    const d = await readDbFile('kombo/flip.json');
+    const [d, fb] = await Promise.all([readDbFile('kombo/flip.json'), readRepoJson('data/fb.json').catch(() => null)]);
+    FS.fb = fb && fb.terms ? fb : null;
     if (d) { d._terms = d.terms.map(r => rowObj(d.cols, r)); d._byK = new Map(d._terms.map(t => [t.k, t])); d._deals = d.deals.map(r => rowObj(d.dealCols, r)); }
     FS.data = d;
   } catch (e) { FS.err = e.message; }
@@ -822,34 +831,37 @@ async function loadTrend(k) {
   try { FS.shards.set(n, await readDbFile(`kombo/trend/${n}.json`)); } catch { FS.shards.set(n, { terms: {} }); }
   render();
 }
-// Värdering med appens egna inställningar (värdering, prutmån, avgifter, vinstregel).
+// Rättvist pris kommer från databasen (t.fair): nedre 90 %-gränsen för medianen av riktiga försäljningar.
+// Köppris: ditt butikspris om du skrivit ett, annars billigaste fjärdedelen på Blocket eller Facebook.
 function flipVal(t, buyPrice) {
-  const tv = t.conf === 3 ? t.t50 : null;
-  const bv = (t.gN >= 8 ? t.g50 : t.b50) * (1 - S.cfg.haggle / 100);
-  const vals = [tv, bv].filter(v => v != null && v > 0);
-  if (!vals.length) return null;
-  const resale = S.cfg.valuation === 'safe' ? (tv ?? bv) : S.cfg.valuation === 'opt' ? Math.max(...vals) : vals.reduce((a, b) => a + b, 0) / vals.length;
-  const platform = tv != null ? S.cfg.platform : 'blocket';   // skrymmande saker som inte går på Tradera säljs på Blocket
+  if (!t || !t.fair) return null;
+  const resale = t.fair, platform = (t.src & 1) ? S.cfg.platform : 'blocket';
   const net = resale - fee(platform, resale);
-  const buy = buyPrice ?? (S.price != null ? S.price : t.b25);
+  const fb = FS.fb && FS.fb.terms[t.k];
+  let buy = buyPrice, buyAt = '';
+  if (buy == null) {
+    if (S.price != null) { buy = S.price; buyAt = 'i butiken'; }
+    else { buy = t.b25; buyAt = 'på Blocket'; if (fb && fb.n >= 5 && fb.p25 < buy) { buy = fb.p25; buyAt = 'på FB'; } }
+  }
   const vd = verdict({ net, max: maxBuy(net) }, buy);
-  const liq = (t.tW || 0) * 4 + (t.gN || 0) + (t.bN || 0) / 4;
-  const w = { 3: 1, 2: .8, 1: .4, 0: .1 }[t.conf] || 0;
-  return { resale, net, buy, platform, vd, max: maxBuy(net), score: vd ? w * vd.profit * Math.log(2 + liq) : 0 };
+  const sold = Math.max(t.tN || 0, t.gN || 0);
+  return { resale, net, buy, buyAt, platform, fb, vd, max: maxBuy(net), score: vd ? (t.src === 4 ? .35 : 1) * vd.profit * Math.min(1, sold / 5) : 0 };
 }
-const confPill = c => `<span class="pill ${CONF[c][1]}" title="${esc(CONF[c][2])}">${CONF[c][0]}</span>`;
+const SRC = { 1: ['Säker · Tradera-sålda', 'fast'], 2: ['Säker · Blocket-sålda', 'fast'], 3: ['Säker · Tradera + Blocket', 'fast'], 4: ['Uppskattad', 'slow'] };
+const confPill = (c, src) => src && SRC[src] ? `<span class="pill ${SRC[src][1]}">${SRC[src][0]}</span>` : `<span class="pill ${CONF[c][1]}" title="${esc(CONF[c][2])}">${CONF[c][0]}</span>`;
 const fdays = d => d == null ? '–' : d < 1 ? 'samma dag' : `${Math.round(d)} d`;
 function flipCard(t) {
   const v = flipVal(t); if (!v) return '';
   const open = FS.open === t.k;
-  const pills = [confPill(t.conf),
+  const pills = [confPill(t.conf, t.src),
+    v.fb && v.fb.n ? `<span class="pill">FB ${v.fb.n} ute · ~${kr(v.fb.p50)}</span>` : '',
     t.tW ? `<span class="pill">${t.tW} sålda/v Tradera</span>` : '',
     t.gN ? `<span class="pill">${t.gN} sålda/30 d Blocket${t.s50 != null && t.gN >= 5 ? ' · ' + fdays(t.s50) : ''}</span>` : '',
     `<span class="pill">${t.bN} ute på Blocket</span>`].join('');
   return `<div class="flip${open ? ' open' : ''}">
     <button class="flip-head" data-flipopen="${esc(t.k)}" aria-expanded="${open}">
       <div class="flip-main"><div class="flip-name">${esc(t.k)}</div>
-        <div class="muted small num">Köp ${S.price != null ? 'för' : 'från ~'}${kr(v.buy)} · säljs ~${kr(v.resale)}${v.vd && isFinite(v.vd.mult) ? ' · x' + v.vd.mult.toFixed(1) : ''}</div>
+        <div class="muted small num">Köp ~${kr(v.buy)} ${v.buyAt} · rättvist pris ${kr(v.resale)}${v.vd && isFinite(v.vd.mult) ? ' · x' + v.vd.mult.toFixed(1) : ''}</div>
         <div class="meta">${pills}</div></div>
       <div class="flip-profit ${v.vd ? v.vd.cls : ''} num">${v.vd ? (v.vd.profit >= 0 ? '+' : '') + kr(v.vd.profit) : '–'}</div>
     </button>
@@ -863,14 +875,24 @@ function flipDetail(t, v) {
   const row = (lab, n, a, b, c, d) => `<tr><td>${lab}</td><td class="r">${n}</td><td class="r">${a}</td><td class="r">${b}</td><td class="r">${c}</td><td class="r">${d}</td></tr>`;
   return `<div class="flip-body">
     <div class="spread"><div>${tagHTML({ max: v.max }, false)}</div><div class="muted small">Säljs på ${v.platform === 'tradera' ? 'Tradera' : 'Blocket'} · regel: ${ruleText()}</div></div>
+    <div class="note small">${fairText(t)}</div>
     <div class="scroll-x"><table class="table small"><thead><tr><th></th><th class="r">Antal</th><th class="r">Låg</th><th class="r">Median</th><th class="r">Hög</th><th class="r">Fart</th></tr></thead><tbody>
       ${row('<span class="src b">Blocket</span><br>ute nu', t.bN, kr(t.b25), kr(t.b50), kr(t.b75), '')}
       ${t.gN ? row('<span class="src b">Blocket</span><br>sålda 30 d', t.gN, '', kr(t.g50), '', fdays(t.s50)) : ''}
       ${t.tN ? row('<span class="src t">Tradera</span><br>sålda 30 d', t.tN, kr(t.t25), kr(t.t50), kr(t.t75), `${t.tW}/v`) : ''}
+      ${v.fb ? row(`<span class="src f">FB</span><br>ute ${esc(FS.fb.checkedAt || '')}`, v.fb.n, kr(v.fb.p25), kr(v.fb.p50), kr(v.fb.p75), '') : ''}
     </tbody></table></div>
     ${trendChart(series)}
+    ${v.fb && v.fb.cheap && v.fb.cheap.length ? `<div class="lbl">Billigast på FB när vi kollade</div><div class="fb-list">${v.fb.cheap.map(([id, p, ti]) => `<a href="https://www.facebook.com/marketplace/item/${encodeURIComponent(id)}/" target="_blank" rel="noopener"><span>${esc(ti)}</span><span class="num">${kr(p)}</span></a>`).join('')}</div>` : ''}
     ${deals.length ? `<div class="lbl">Billiga just nu på Blocket</div><div class="listings">${deals.map(dealTile).join('')}</div>` : ''}
     <div class="row">${searchLinks(t.k)}</div></div>`;
+}
+function fairText(t) {
+  const parts = [];
+  if (t.src & 1) parts.push(`Tradera: minst hälften av ${t.tN} sålda senaste 30 dagarna gick för ${kr(t.tL)} eller mer (90 % säkert).`);
+  if (t.src & 2) parts.push(`Blocket: minst hälften av ${t.gN} sålda gick för ${kr(t.gL)} eller mer (90 % säkert), räknat ner 10 % för annonser som togs bort osålda.`);
+  if (t.src === 4) parts.push(`För få sålda. Uppskattat från Blocket-median ${kr(t.b50)} × ${String(FS.data.askToSold || 0.85).replace('.', ',')} (vad saker brukar säljas för jämfört med utropspriset) × 0,85. Osäkert.`);
+  return `<b>Rättvist pris ${kr(t.fair)}.</b> ${parts.join(' ')}${(t.src & 3) === 3 ? ' Det lägsta av dem används.' : ''}`;
 }
 function trendChart(s) {
   if (!s) return `<div class="muted small">Laddar trend…</div>`;
@@ -896,7 +918,7 @@ function renderFlip() {
   const el = $('#v-flippa');
   if (!FS.data && !FS.loading && !FS.err) loadFlip();
   const d = FS.data;
-  const modes = [['typer', 'Varutyper'], ['annonser', 'Billigt på Blocket'], ['sok', 'Sök allt']];
+  const modes = [['typer', 'Bästa fynd'], ['annonser', 'Billigt på Blocket'], ['sok', 'Sök allt']];
   const head = `<div class="panel"><div class="spread"><div><div class="lbl">Blocket + Tradera${d ? ' · uppdaterad ' + when(d.updatedAt) : ''}</div><h2>Flippa</h2></div>
       ${d && d.total && d.total.length ? (() => { const r = d.total[d.total.length - 1]; return `<div class="muted small num">${r[1].toLocaleString('sv-SE')} annonser på Blocket · ${r[2].toLocaleString('sv-SE')} sålda på Tradera (30 d)</div>`; })() : ''}</div>
     <div class="chips" role="group" aria-label="Visa">${modes.map(([k, l]) => `<button class="chip" data-flipmode="${k}" aria-pressed="${FS.mode === k}">${l}</button>`).join('')}</div>
@@ -904,8 +926,14 @@ function renderFlip() {
       <div class="field"><label for="flipQ">Filtrera</label><input id="flipQ" data-flipq="1" type="search" placeholder="t.ex. värmeelement, babolat" value="${esc(FS.q)}" autocomplete="off"></div>
       <div class="field"><label for="flipMax">Max inköp</label><input id="flipMax" data-flipmax="1" type="number" inputmode="numeric" min="0" step="50" value="${FS.max ?? ''}" placeholder="kr"></div>
     </div>
-    ${FS.mode !== 'sok' ? `<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-flipall="1" ${FS.all ? 'checked' : ''}> Visa även osäkra (bara utropspriser på Blocket)</label>` : ''}
-    <div class="muted small">${S.price != null ? `Räknar med att du köper för ${kr(S.price)} (Pris i butiken).` : 'Köppris = billigaste fjärdedelen på Blocket. Skriv ett pris under ”Pris i butiken” för att räkna med det.'} Regel: ${ruleText()}.</div></div>`;
+    ${FS.mode !== 'sok' ? `<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-flipall="1" ${FS.all ? 'checked' : ''}> Visa även uppskattade (för få sålda, bara utropspriser)</label>` : ''}
+    <div class="muted small">${S.price != null ? `Räknar med att du köper för ${kr(S.price)} (Pris i butiken).` : 'Köppris = billigaste fjärdedelen på Blocket eller Facebook. Skriv ett pris under ”Pris i butiken” (Meny) för att räkna med det.'} Regel: ${ruleText()}.</div>
+    <details class="how"><summary>Så räknar vi fram ett rättvist pris</summary>
+      <p class="muted small">Priset bygger på <b>sålda</b> annonser, inte på vad folk begär: slutpriser på Tradera och annonser som försvunnit från Blocket. Det krävs minst 10 sålda.</p>
+      <p class="muted small">Vi tar inte snittet utan en försiktig gräns: priset som minst hälften av försäljningarna nådde, med 90 % säkerhet. Med få sålda blir gränsen lägre, med många närmar den sig medianen.</p>
+      <p class="muted small">En varutyp räknas bara om priserna inte spretar (dyraste fjärdedelen högst 3,5 gånger billigaste) och Tradera och Blocket är överens om nivån. Annars är det olika saker under samma namn.</p>
+      <p class="muted small">Facebook Marketplace kollas för hand för de bästa kandidaterna (utropspriser, Stockholm). Det visar var du kan köpa billigt och om det redan är fullt av samma vara.</p>
+      <p class="muted small">Kolla alltid modell, storlek och skick. Statistiken gäller varutypen, inte just ditt exemplar.</p></details></div>`;
   if (FS.loading && !d) { el.innerHTML = head + `<div class="note">Laddar…</div>`; return; }
   if (FS.err) { el.innerHTML = head + `<div class="note bad">Kunde inte läsa flipp-datan: ${esc(FS.err)}</div>`; return; }
   if (!d) { el.innerHTML = head + `<div class="note">Ingen gemensam databas än. Den byggs i nattens körning (Databas → Kör nu).</div>`; return; }
@@ -914,7 +942,7 @@ function renderFlip() {
   let body = '';
   if (FS.mode === 'annonser') {
     const list = d._deals.filter(x => (!max || x.p <= max) && (hit(x.k) || norm(x.t).includes(qn)))
-      .map(x => { const t = d._byK.get(x.k), v = t && (FS.all || t.conf >= 2) && flipVal(t, x.p); return { x, v }; }).filter(o => o.v && o.v.vd && o.v.vd.cls === 'buy')
+      .map(x => { const t = d._byK.get(x.k), v = t && (FS.all || t.src !== 4) && flipVal(t, x.p); return { x, v }; }).filter(o => o.v && o.v.vd && o.v.vd.cls === 'buy')
       .sort((a, b) => b.v.vd.profit - a.v.vd.profit);
     body = list.length ? `<div class="listings">${list.slice(0, FS.limit).map(o => dealTile(o.x)).join('')}</div>${list.length > FS.limit ? `<button class="btn" data-flipmore="1">Visa fler (${list.length - FS.limit})</button>` : ''}`
       : `<div class="note">Inga annonser under ${max ? kr(max) : 'gränsen'} som klarar regeln just nu.</div>`;
@@ -922,7 +950,7 @@ function renderFlip() {
   } else {
     let src;
     if (FS.mode === 'sok') { loadAllTerms(); src = FS.terms || []; if (!qn) { el.innerHTML = head + `<div class="note">Skriv ett ord ovan för att se hur det går på Blocket och Tradera.${FS.termsLoading ? ' Laddar…' : ''}</div>`; return; } }
-    else src = d._terms.filter(t => !t.cov && (FS.all || t.conf >= 2));
+    else src = d._terms.filter(t => !t.cov && t.fair > 0 && (FS.all || t.src !== 4));
     const list = src.filter(t => hit(t.k)).map(t => ({ t, v: flipVal(t) })).filter(o => o.v && (FS.mode === 'sok' || (o.v.vd && o.v.vd.cls === 'buy' && (!max || o.v.buy <= max))))
       .sort((a, b) => FS.mode === 'sok' ? (b.t.bN + b.t.tN) - (a.t.bN + a.t.tN) : b.v.score - a.v.score);
     body = list.length ? list.slice(0, FS.limit).map(o => flipCard(o.t)).join('') + (list.length > FS.limit ? `<button class="btn" data-flipmore="1">Visa fler (${list.length - FS.limit})</button>` : '')

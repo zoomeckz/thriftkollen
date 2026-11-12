@@ -55,6 +55,12 @@ scripts/kombo.ps1 körs sist i nattens databaskörning och slår ihop källorna 
 - Fliken **Flippa** i appen visar varutyper som klarar din vinstregel (köp i billigaste fjärdedelen eller för ditt butikspris,
   sälj för vad det brukar gå för), billiga annonser på Blocket just nu och sök på valfritt ord. Trenden per varutyp växer varje natt.
 - Filer på grenen db: `kombo/flip.json` (appen), `kombo/terms.json` (alla ord), `kombo/trend/NN.json` (en rad per dag och ord).
+- **Rättvist pris** = nedre 90 %-gränsen för medianen av sålda (ordningsstatistika, minst 10 sålda): minst hälften av
+  försäljningarna nådde det priset, med 90 % säkerhet. Tradera-slutpriser och försvunna Blocket-annonser (minus 10 %).
+  Den lägsta gränsen används. För få sålda: Blocket-median × kalibrerad kvot slutpris/utropspris × 0,85, märkt *Uppskattad*.
+- **Facebook Marketplace** (`data/fb.json`): utropspriser i Stockholm för de bästa kandidaterna, kollade för hand i webbläsaren
+  (inte automatiskt, Meta tillåter inte det). Visar var man kan köpa billigt och hur mycket som redan ligger ute.
+- Knappen **Flippa** bredvid Meny öppnar listan direkt.
 
 ### Fotoflödet
 
