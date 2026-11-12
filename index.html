@@ -859,10 +859,10 @@ function filteredDbRows() {
 function renderDatabas() {
   const el = $('#v-databas');
   if (!S.dbMetaLoaded) { el.innerHTML = `<div class="empty muted"><span class="spinner"></span>Hämtar databasen…</div>`; if (!S.dbMetaLoading) loadDbMeta(); return; }
-  const watches = [...(S.watches || [])].sort((a, b) => isBig(b) - isBig(a));
+  const watches = [...(S.watches || [])].sort((a, b) => (isBig(b) || b.mode === 'tradera') - (isBig(a) || a.mode === 'tradera'));
   const list = watches.map(w => { const i = S.dbIndex.get(w.id);
-    return `<button class="watch${isBig(w) ? ' big' : ''}" data-dbsel="${esc(w.id)}" aria-pressed="${S.dbSel === w.id}"><b>${esc(w.name)}</b>
-      <span>${i ? `${i.active.toLocaleString('sv-SE')} annonser${i.subs ? ` · ${i.subs} underkategorier` : ''} · ${when(i.updatedAt)}` : 'Väntar på första körningen'}</span></button>`; }).join('');
+    return `<button class="watch${isBig(w) || w.mode === 'tradera' ? ' big' : ''}" data-dbsel="${esc(w.id)}" aria-pressed="${S.dbSel === w.id}"><b>${esc(w.name)}</b>
+      <span>${i ? `${i.active.toLocaleString('sv-SE')} ${w.mode === 'tradera' ? 'sålda 30 d' : 'annonser'}${i.subs ? ` · ${i.subs} underkategorier` : ''} · ${when(i.updatedAt)}` : 'Väntar på första körningen'}</span></button>`; }).join('');
   el.innerHTML = `
     <div class="panel">
       <div class="spread"><h2>Databas</h2><div class="row"><a class="btn small" href="statistik.html">Stora statistiken ↗</a><button class="btn small" data-dbform="1">${S.dbShowForm ? 'Stäng' : '+ Ny bevakning'}</button></div></div>
@@ -892,6 +892,9 @@ function watchFormHTML() {
 function dbViewHTML() {
   const w = (S.watches || []).find(x => x.id === S.dbSel), idx = S.dbIndex.get(S.dbSel);
   if (!w) return '';
+  if (w.mode === 'tradera') return `<div class="panel"><div class="lbl">Tradera · hela Sverige</div><h2>${esc(w.name)}</h2>
+    <p class="muted">Sålda annonser med riktiga slutpriser, bud och sluttider, uppdaterat varje natt. ${idx ? `${idx.active.toLocaleString('sv-SE')} sålda senaste 30 dagarna i ${idx.subs} underkategorier, uppdaterad ${when(idx.updatedAt)}.` : 'Första körningen är inte klar än.'}</p>
+    <div class="row"><a class="btn primary" href="statistik.html?w=${encodeURIComponent(w.id)}">Öppna Tradera-statistiken ↗</a><button class="btn small" data-dbrun="${esc(w.id)}" ${gh.token ? '' : 'disabled'}>Kör nu</button></div></div>`;
   let picker = '';
   if (isBig(w)) {
     const cats = (S.bcats && S.bcats.categories) || [], cat = cats.find(c => c.subs.some(s => s.value === S.dbSub)) || cats[0];

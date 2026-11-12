@@ -38,6 +38,10 @@ header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, v
 .head h1 { margin: 0; font-family: var(--font-display); font-stretch: 85%; font-weight: 800; font-size: 1.25rem; }
 .head .sub { color: var(--muted); font-size: .85rem; }
 .head .grow { flex: 1 1 auto; }
+.sources { display: inline-flex; gap: 6px; }
+.sources button { display: grid; text-align: left; line-height: 1.15; padding: 7px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 700; }
+.sources button small { font-weight: 500; font-size: .7rem; color: var(--muted); }
+.sources button[aria-pressed="true"] { border-color: var(--tag); box-shadow: inset 0 -3px 0 var(--tag); }
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none; color: var(--ink); font-size: .88rem; }
 .btn:hover { border-color: var(--muted); }
 
@@ -167,6 +171,7 @@ canvas.map { width: 100%; display: block; border-radius: 10px; background: var(-
   <div class="wrap head">
     <a class="logo" href="./">Thrift<span>kollen</span></a>
     <div class="grow"><h1 id="title">Marknaden</h1><div class="sub" id="subtitle">Laddar…</div></div>
+    <nav class="sources" id="sources" aria-label="Källa"></nav>
     <a class="btn" href="./#databas">← Appen</a>
   </div>
 </header>
@@ -283,22 +288,35 @@ async function boot() {
   readHash();
   let idx;
   try { idx = await getJson('index.json'); } catch (e) { return fail('Kunde inte läsa databasen (' + esc(e.message) + ').'); }
-  const big = (idx.watches || []).filter(w => w.mode === 'alla');
-  if (!big.length) return fail(`Det finns ingen Hela Blocket-bevakning än. Skapa en i appen under <a href="./#databas">Databas</a> → + Ny bevakning → ★ Hela Blocket. Första körningen tar ungefär 20 minuter.`);
-  const want = new URLSearchParams(location.search).get('w');
-  const w = big.find(x => x.id === want) || big[0];
-  try { [S.ov, S.trend] = await Promise.all([getJson(`${w.id}/overview.json`), getJson(`${w.id}/trend.json`).catch(() => null)]); }
-  catch (e) { return fail(e.status === 404 ? 'Första körningen av hela Blocket är inte klar än. Kom tillbaka om en stund.' : 'Kunde inte läsa översikten: ' + esc(e.message)); }
+  const big = (idx.watches || []).filter(w => w.mode === 'alla' || w.mode === 'tradera');
+  if (!big.length) return fail(`Det finns ingen Hela Blocket- eller Tradera-bevakning än. Skapa en i appen under <a href="./#databas">Databas</a> → + Ny bevakning.`);
   S.watches = big;
+  const want = new URLSearchParams(location.search).get('w');
+  await openSource(big.find(x => x.id === want) || big.find(x => x.mode === 'alla') || big[0], true);
+}
+async function openSource(w, first) {
+  S.src = w; S.charts && Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
+  if (!first) { S.cat = ''; S.sub = ''; $('#app').className = 'loading'; $('#app').innerHTML = '<div class="spinner"></div><div>Hämtar ' + esc(w.name) + '…</div>'; }
+  drawSources();
+  try { [S.ov, S.trend] = await Promise.all([getJson(`${w.id}/overview.json`), getJson(`${w.id}/trend.json`).catch(() => null)]); }
+  catch (e) { S.ov = null; return fail(e.status === 404 ? 'Första körningen är inte klar än. Kom tillbaka om en stund.' : 'Kunde inte läsa översikten: ' + esc(e.message)); }
   if (S.sub && !subOf(S.sub)) S.sub = ''; if (S.sub) S.cat = subOf(S.sub).cat;
+  if (S.cat && !S.ov.subs.some(s => s.cat === S.cat)) S.cat = '';
   $('#title').textContent = S.ov.name;
-  const days = S.trend ? S.trend.total.length : 1;
-  $('#subtitle').textContent = `${fmt(S.ov.totals.active)} annonser i ${S.ov.totals.subs} underkategorier · uppdaterad ${new Date(S.ov.updatedAt).toLocaleString('sv-SE', { dateStyle: 'medium', timeStyle: 'short' })} · ${days} ${days === 1 ? 'dag' : 'dagar'} historik`;
+  const days = S.trend ? S.trend.total.length : 1, upd = new Date(S.ov.updatedAt).toLocaleString('sv-SE', { dateStyle: 'medium', timeStyle: 'short' });
+  $('#subtitle').textContent = isT() ? `${fmt(S.ov.totals.sold30)} sålda annonser senaste 30 dagarna i ${S.ov.totals.subs} underkategorier · uppdaterad ${upd} · ${days} ${days === 1 ? 'dag' : 'dagar'} historik`
+    : `${fmt(S.ov.totals.active)} annonser i ${S.ov.totals.subs} underkategorier · uppdaterad ${upd} · ${days} ${days === 1 ? 'dag' : 'dagar'} historik`;
+  history.replaceState(null, '', '?w=' + encodeURIComponent(w.id) + location.hash);
   render(true);
+}
+const isT = () => S.ov && S.ov.source === 'tradera';
+function drawSources() {
+  $('#sources').innerHTML = S.watches.map(w => `<button data-src="${esc(w.id)}" aria-pressed="${S.src && S.src.id === w.id}">${w.mode === 'tradera' ? 'Tradera' : 'Blocket'}<small>${esc(w.mode === 'tradera' ? 'sålda, hela Sverige' : (w.name.split('·')[1] || '').trim())}</small></button>`).join('');
 }
 function fail(html) { $('#app').className = 'loading'; $('#app').innerHTML = `<div style="max-width:520px">${html}</div>`; $('#subtitle').textContent = ''; }
 
 function render(first) {
+  if (isT()) return renderT(first);
   writeHash();
   Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
   const list = subsIn(), A = agg(list), ov = S.ov;
@@ -312,7 +330,6 @@ function render(first) {
     <div class="field"><label for="f-cat">Kategori</label><select id="f-cat"><option value="">Alla kategorier</option>${cats.map(c => `<option value="${c.value}" ${c.value === S.cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div class="field"><label for="f-sub">Underkategori</label><select id="f-sub" ${S.cat ? '' : 'disabled'}><option value="">${S.cat ? 'Alla i ' + esc(catName(S.cat)) : 'Välj kategori först'}</option>${S.cat ? ov.subs.filter(s => s.cat === S.cat).map(s => `<option value="${s.sub}" ${s.sub === S.sub ? 'selected' : ''}>${esc(s.name)} (${fmt(s.active)})</option>`).join('') : ''}</select></div>
     <div class="field"><span class="lbl">Trendperiod</span><div class="seg" role="group" aria-label="Trendperiod">${[[7, '7 d'], [30, '30 d'], [90, '90 d'], [0, 'Allt']].map(([v, l]) => `<button data-period="${v}" aria-pressed="${S.period === v}">${l}</button>`).join('')}</div></div>
-    ${S.watches.length > 1 ? `<div class="field"><label for="f-w">Område</label><select id="f-w">${S.watches.map(w => `<option value="${esc(w.id)}" ${w.id === ov.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>` : ''}
     <div class="crumbs small" style="flex-basis:100%"><button data-go="">Alla kategorier</button>${S.cat ? ` › <button data-go="${S.cat}">${esc(catName(S.cat))}</button>` : ''}${S.sub ? ` › <span>${esc(subOf(S.sub).name)}</span>` : ''}</div>
   </div>
 
@@ -538,7 +555,7 @@ function drawHeat(A) {
     }
   }
   el.innerHTML = h;
-  el.onmousemove = e => { const c = e.target.closest('.c'); if (!c) return hideTip(); const [t, v] = c.dataset.tip.split('|'); showTip(e, `<b>${t}</b>${fmt(+v)} annonser publicerade`); };
+  el.onmousemove = e => { const c = e.target.closest('.c'); if (!c) return hideTip(); const [t, v] = c.dataset.tip.split('|'); showTip(e, `<b>${t}</b>${fmt(+v)} annonser ${isT() ? 'sålda' : 'publicerade'}`); };
   el.onmouseleave = hideTip;
   const tot = A.wdhr.reduce((a, b) => a + b, 0);
   $('#heat-best').textContent = tot ? `Flest publiceringar: ${WEEK[best.r].toLowerCase()} kl ${String(best.hr).padStart(2, '0')}. Lägger du upp då konkurrerar du med flest nya annonser, men har också flest köpare inne.` : '';
@@ -624,6 +641,230 @@ function drawTable() {
     <tbody>${rows.map(s => `<tr data-pick="${s.sub}" class="${s.sub === S.sub ? 'sel' : ''}">${cols.map(([k, , f, , r]) => `<td class="${r ? 'r' : ''}">${f(s)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
+// =====================================================================
+// ---------- Tradera: sålda annonser med riktiga slutpriser ----------
+// =====================================================================
+function aggT(list) {
+  const z = n => new Array(n).fill(0);
+  const a = { n: list.length, active: 0, soldWindow: 0, sold30: 0, soldWeek: 0, soldToday: 0, value: 0, auctions: 0, overStart: 0, company: 0, freeShip: 0, sampled: 0,
+    hist: z(S.ov.histBands.length), wdhr: z(168), endDays: z(30), types: z(5) };
+  for (const s of list) {
+    for (const k of ['active', 'soldWindow', 'sold30', 'soldWeek', 'soldToday', 'value', 'auctions', 'overStart', 'company', 'freeShip']) a[k] += s[k] || 0;
+    if (!s.complete) a.sampled++;
+    s.hist.forEach((v, i) => a.hist[i] += v); s.wdhr.forEach((v, i) => a.wdhr[i] += v); s.endDays.forEach((v, i) => a.endDays[i] += v); s.types.forEach((v, i) => a.types[i] += v);
+  }
+  const one = list.length === 1 ? list[0] : null;
+  a.p50 = one ? one.p[2] : wmedian(list.map(s => [s.p[2], s.sold30])); a.p25 = one ? one.p[1] : wmedian(list.map(s => [s.p[1], s.sold30])); a.p75 = one ? one.p[3] : wmedian(list.map(s => [s.p[3], s.sold30]));
+  a.bids = one ? one.bidsAvg : wmedian(list.map(s => [s.bidsAvg, s.auctions]));
+  a.hours = one ? one.hours50 : wmedian(list.map(s => [s.hours50, s.sold30]));
+  a.ship = one ? one.ship50 : wmedian(list.map(s => [s.ship50, s.sold30]));
+  a.rate = a.soldWindow + a.active ? a.soldWindow / (a.soldWindow + a.active) : null;   // andel sålda av allt som legat ute
+  a.priced = a.sold30; a.approx = !one;
+  // Medianpris per sluttimme (auktioner)
+  a.hourPrice = Array.from({ length: 24 }, (_, h) => { const pairs = list.map(s => [s.hourPrice[h][1], s.hourPrice[h][0]]); return [pairs.reduce((x, p) => x + (p[1] || 0), 0), one ? one.hourPrice[h][1] : wmedian(pairs)]; });
+  return a;
+}
+const rateT = s => s.soldWindow + s.active ? s.soldWindow / (s.soldWindow + s.active) : 0;
+function trendForT(list) {
+  const T = S.trend; if (!T) return [];
+  const m = new Map();
+  for (const s of list) for (const r of (T.subs[s.sub] || [])) { const d = r[0]; if (!m.has(d)) m.set(d, { day: d, active: 0, soldWindow: 0, soldWeek: 0 }); const o = m.get(d); o.active += r[1] || 0; o.soldWindow += r[2] || 0; o.soldWeek += r[5] || 0; }
+  const rows = [...m.values()].sort((a, b) => a.day - b.day);
+  return S.period ? rows.filter(r => r.day > S.ov.day - S.period) : rows;
+}
+function itemCards(arr, kind) {
+  const ov = S.ov;
+  return arr.length ? arr.map(d => { const [id, t, p, img, bids] = d, badge = kind === 'wars' ? `x${(p / Math.max(1, d[5])).toFixed(1)}` : bids ? bids + ' bud' : 'köp nu';
+    return `<a class="deal" href="${ov.urlBase}${id}" target="_blank" rel="noopener"><div class="im">${img ? `<img loading="lazy" src="${ov.imgBase}${esc(img)}" alt="">` : ''}<span class="off">${badge}</span></div>
+      <div class="p"><span>${kr(p)}</span>${kind === 'wars' ? `<span class="muted" style="font-weight:500">utrop ${kr(d[5])}</span>` : ''}</div><div class="t">${esc(t)}</div><div class="m">såld ${dFmt.format(dayDate(d[6]))}${d[4] ? ' · ' + d[4] + ' bud' : ''}</div></a>`; }).join('')
+    : '<p class="muted small">Inget i urvalet än.</p>';
+}
+function renderT(first) {
+  writeHash();
+  Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
+  const list = subsIn(), A = aggT(list), ov = S.ov;
+  const scopeName = S.sub ? subOf(S.sub).name : S.cat ? catName(S.cat) : 'Alla kategorier';
+  const cats = ov.cats.filter(c => ov.subs.some(s => s.cat === c.value));
+  const tr = trendForT(list);
+  const app = $('#app'); app.className = 'dash';
+  let i = 0; const I = () => `style="--i:${i++}"`;
+  const auctionShare = A.types[1] + A.types[2], soldAll = A.types.reduce((x, y) => x + y, 0);
+  app.innerHTML = `
+  <div class="filters" style="grid-column:span 12">
+    <div class="field"><label for="f-cat">Kategori</label><select id="f-cat"><option value="">Alla kategorier</option>${cats.map(c => `<option value="${c.value}" ${c.value === S.cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-sub">Underkategori</label><select id="f-sub" ${S.cat ? '' : 'disabled'}><option value="">${S.cat ? 'Alla i ' + esc(catName(S.cat)) : 'Välj kategori först'}</option>${S.cat ? ov.subs.filter(s => s.cat === S.cat).map(s => `<option value="${s.sub}" ${s.sub === S.sub ? 'selected' : ''}>${esc(s.name)} (${fmt(s.soldWindow)})</option>`).join('') : ''}</select></div>
+    <div class="field"><span class="lbl">Trendperiod</span><div class="seg" role="group" aria-label="Trendperiod">${[[7, '7 d'], [30, '30 d'], [90, '90 d'], [0, 'Allt']].map(([v, l]) => `<button data-period="${v}" aria-pressed="${S.period === v}">${l}</button>`).join('')}</div></div>
+    <div class="crumbs small" style="flex-basis:100%"><button data-go="">Alla kategorier</button>${S.cat ? ` › <button data-go="${S.cat}">${esc(catName(S.cat))}</button>` : ''}${S.sub ? ` › <span>${esc(subOf(S.sub).name)}</span>` : ''}</div>
+  </div>
+  <div class="note anim" ${I()}>Tradera visar <b>sålda</b> annonser med riktiga slutpriser, i hela Sverige. Varje natt hämtas allt som sålts inom ${ov.days} dagar från att det lades upp, upp till ${8 * 80} per underkategori. ${A.sampled ? `${A.sampled} stora underkategorier är därför ett urval, men priserna är representativa.` : ''} ”Sålda enligt Tradera” är Traderas egen räkning för ungefär ett halvår.</div>
+
+  <div class="kpis">
+    <div class="kpi hero anim" ${I()}><span class="lbl">Sålda senaste 30 d</span><b data-count="${A.sold30}"></b><span>i databasen · ${esc(scopeName)}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Medianpris, sålt</span><b data-count="${A.p50 ?? ''}" data-f="kr"></b><span>${A.approx ? 'ungefär, ' : ''}hälften mellan ${kr(A.p25)} och ${kr(A.p75)}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Sålda enligt Tradera</span><b data-count="${A.soldWindow}" data-f="short"></b><span>${fmt(A.active)} till salu nu · säljgrad ${speedFmt(A.rate)}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Sålt värde, 30 d</span><b data-count="${A.value}" data-f="short"></b><span>kr i slutpriser</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Auktioner</span><b>${pct(auctionShare, soldAll)}</b><span>${A.bids != null ? 'snitt ' + String(A.bids).replace('.', ',') + ' bud' : ''} · ${pct(A.overStart, A.auctions)} över utropspris</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Tid till såld</span><b>${A.hours != null ? (A.hours >= 48 ? Math.round(A.hours / 24) + ' d' : Math.round(A.hours) + ' h') : '–'}</b><span>median, från uppläggning</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Frakt</span><b>${kr(A.ship)}</b><span>median billigaste frakt · ${pct(A.freeShip, A.sold30)} gratis</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Företag</span><b>${pct(A.company, A.sold30)}</b><span>av de sålda annonserna</span></div>
+  </div>
+
+  <section class="card s8 anim" ${I()}>
+    <div class="card-head"><div><h2>Vad säljs mest?</h2><div class="hint">Ytan är antalet sålda enligt Tradera. Klicka för att gå ner en nivå.</div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg" role="group" aria-label="Färg efter">${[['speed', 'Säljgrad'], ['price', 'Medianpris'], ['drops', 'Bud']].map(([v, l]) => `<button data-color="${v}" aria-pressed="${S.color === v}">${l}</button>`).join('')}</div>
+      <div class="legend-ramp"><span>Låg</span><i></i><span>Hög</span></div></div></div>
+    <div class="tree" id="tree" role="list"></div>
+  </section>
+  <section class="card s4 anim" ${I()}>
+    <div class="card-head"><h2>Topplistor</h2></div>
+    <div class="seg" role="group" aria-label="Topplista" style="flex-wrap:wrap">${[['fast', 'Säljgrad'], ['new', 'Mest sålt'], ['dear', 'Dyrast'], ['drop', 'Flest bud']].map(([v, l]) => `<button data-rank="${v}" aria-pressed="${S.rank === v}">${l}</button>`).join('')}</div>
+    <div class="rank" id="rank"></div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Sålda per dag</h2><div class="hint">Efter slutdatum, senaste 30 dagarna. De första dagarna fylls på allteftersom databasen växer.</div></div></div>
+    <div class="chart-box"><canvas id="c-sold"></canvas></div>
+  </section>
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>${tr.length > 1 ? 'Till salu över tid' : 'Hur säljs det?'}</h2><div class="hint">${tr.length > 1 ? 'Aktiva annonser på Tradera, en punkt per natt' : 'Sålda annonser per försäljningssätt'}</div></div></div>
+    <div class="chart-box">${tr.length > 1 ? '<canvas id="c-active"></canvas>' : '<canvas id="c-types"></canvas>'}</div>
+  </section>
+
+  <section class="card s7 anim" ${I()}>
+    <div class="card-head"><div><h2>Pris mot säljgrad</h2><div class="hint">Varje bubbla är en underkategori. Höger = dyrare, upp = större andel av utbudet blir sålt, storlek = antal sålda. ${S.cat ? 'Blå = vald kategori.' : ''} Klicka på en bubbla.</div></div></div>
+    <div class="chart-box tall"><canvas id="c-bubble"></canvas></div>
+  </section>
+  <section class="card s5 anim" ${I()}>
+    <div class="card-head"><div><h2>När slutar försäljningarna?</h2><div class="hint">Veckodag och timme då annonserna såldes, svensk tid.</div></div></div>
+    <div class="heat" id="heat"></div>
+    <div class="hint" id="heat-best"></div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Bästa sluttid för auktioner</h2><div class="hint">Medianpris per timme då auktionen slutade. Staplar med få auktioner är osäkra (se antal i rutan).</div></div></div>
+    <div class="chart-box"><canvas id="c-hour"></canvas></div>
+  </section>
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Prisfördelning, sålt</h2><div class="hint">Slutpris per intervall, senaste 30 dagarna</div></div></div>
+    <div class="chart-box"><canvas id="c-hist"></canvas></div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Märken</h2><div class="hint">Flest sålda${list.length > 1 ? ' (median ungefärlig)' : ''}</div></div></div>
+    <div class="rank" id="brands"></div>
+  </section>
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Skick</h2><div class="hint">Säljarens egen bedömning, där Tradera har den</div></div></div>
+    <div class="rank" id="conds"></div>
+  </section>
+
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Budkrig</h2><div class="hint">Auktioner som gick långt över utropspriset (minst 200 kr). Här finns efterfrågan.</div></div></div>
+    <div class="deals" id="wars"></div>
+  </section>
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Dyraste försäljningarna</h2></div></div>
+    <div class="deals" id="top"></div>
+  </section>
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Alla underkategorier</h2><div class="hint">Klicka på en rubrik för att sortera, på en rad för att välja. Linjen visar sålda per dag senaste 30 dagarna.</div></div></div>
+    <div class="table-wrap" id="table"></div>
+  </section>`;
+
+  app.querySelectorAll('[data-count]').forEach(el => { const v = el.dataset.count === '' ? null : +el.dataset.count; countUp(el, v, el.dataset.f === 'short' ? short : el.dataset.f === 'kr' ? kr : fmt); });
+  drawTreeT(first); drawRankT(); drawHeat(A);
+  const best = A.wdhr.indexOf(Math.max(...A.wdhr));
+  if (A.sold30) $('#heat-best').textContent = `Flest försäljningar slutar ${WEEK[(Math.floor(best / 24) + 6) % 7].toLowerCase()} kl ${String(best % 24).padStart(2, '0')}. Då är flest köpare inne och budar.`;
+  const s1 = '#3987e5', labels30 = A.endDays.map((_, k) => dFmt.format(dayDate(ov.day - 29 + k)));
+  S.charts.sold = new Chart($('#c-sold'), { type: 'bar', data: { labels: labels30, datasets: [{ label: 'Sålda', data: A.endDays, backgroundColor: s1, borderRadius: 4, borderSkipped: 'start', barPercentage: .85, categoryPercentage: .9 }] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: axis({ grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } }), y: axis({ beginAtZero: true, ticks: { callback: v => short(v) } }) },
+      plugins: { tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) + ' sålda' } } } } });
+  if (tr.length > 1) {
+    S.charts.active = new Chart($('#c-active'), { type: 'line', data: { labels: tr.map(r => dFmt.format(dayDate(r.day))), datasets: [{ label: 'Till salu', data: tr.map(r => r.active), borderColor: s1, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: .3 }] },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: axis({ grid: { display: false } }), y: axis({ ticks: { callback: v => short(v) } }) } } });
+  } else {
+    const tn = ov.typeNames, order = [1, 2, 3, 4];
+    S.charts.types = new Chart($('#c-types'), { type: 'bar', data: { labels: order.map(k => tn[k]), datasets: [{ data: order.map(k => A.types[k]), backgroundColor: s1, borderRadius: 4, borderSkipped: 'start', barPercentage: .7 }] },
+      options: { indexAxis: 'y', maintainAspectRatio: false, scales: { x: axis({ beginAtZero: true, ticks: { callback: v => short(v) } }), y: axis({ grid: { display: false } }) },
+        plugins: { tooltip: { displayColors: false, callbacks: { label: c => ` ${fmt(c.raw)} (${pct(c.raw, soldAll)})` } } } } });
+  }
+  // Bubblor
+  const subs = ov.subs.filter(s => s.soldWindow > 0 && s.p[2] > 0), maxS = Math.max(...subs.map(s => s.soldWindow));
+  const sel = s => S.sub ? s.sub === S.sub : S.cat ? s.cat === S.cat : true;
+  const pts = subs.map(s => ({ x: s.p[2], y: Math.round(rateT(s) * 1000) / 10, r: 3 + Math.sqrt(s.soldWindow / maxS) * 26, s }));
+  S.charts.bubble = new Chart($('#c-bubble'), { type: 'bubble', data: { datasets: [{ data: pts, backgroundColor: pts.map(p => sel(p.s) ? 'rgba(57,135,229,.72)' : 'rgba(152,162,175,.22)'), borderColor: pts.map(p => sel(p.s) ? '#9ec5f4' : 'rgba(152,162,175,.4)'), borderWidth: 1.5, hoverBorderColor: '#E8ECF1' }] },
+    options: { maintainAspectRatio: false,
+      scales: { x: axis({ type: 'logarithmic', title: { display: true, text: 'Medianpris sålt (kr, logaritmisk skala)' }, ticks: { callback: v => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].includes(v) ? short(v) : '' } }), y: axis({ beginAtZero: true, max: 100, title: { display: true, text: 'Säljgrad (%)' } }) },
+      onClick: (e, els) => { if (els.length) { const s = pts[els[0].index].s; S.cat = s.cat; S.sub = s.sub; render(); } },
+      onHover: (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      plugins: { tooltip: { displayColors: false, callbacks: { title: c => c[0].raw.s.name, label: c => [c.raw.s.catName, `${fmt(c.raw.s.soldWindow)} sålda, ${fmt(c.raw.s.active)} till salu`, `Medianpris ${kr(c.raw.x)}`, `Säljgrad ${c.raw.y} %`] } } } } });
+  // Pris per sluttimme
+  S.charts.hour = new Chart($('#c-hour'), { type: 'bar', data: { labels: A.hourPrice.map((_, h) => String(h).padStart(2, '0')), datasets: [{ data: A.hourPrice.map(h => h[0] >= 5 ? h[1] : null), backgroundColor: A.hourPrice.map(h => h[0] >= 30 ? s1 : 'rgba(57,135,229,.4)'), borderRadius: 4, borderSkipped: 'start', barPercentage: .85 }] },
+    options: { maintainAspectRatio: false, scales: { x: axis({ grid: { display: false }, title: { display: true, text: 'Sluttimme' } }), y: axis({ beginAtZero: true, ticks: { callback: v => kr(v) } }) },
+      plugins: { tooltip: { displayColors: false, callbacks: { title: c => 'Slutar kl ' + c[0].label, label: c => [`Medianpris ${kr(c.raw)}`, `${fmt(A.hourPrice[c.dataIndex][0])} auktioner`] } } } } });
+  drawHist(A);
+  // Märken och skick
+  const bm = new Map(); for (const s of list) for (const [name, n, mp] of s.brands) { if (!bm.has(name)) bm.set(name, { n: 0, p: [] }); const o = bm.get(name); o.n += n; o.p.push([mp, n]); }
+  const brows = [...bm.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 10), bmx = brows.length ? brows[0][1].n : 1;
+  $('#brands').innerHTML = brows.length ? brows.map(([name, b]) => `<div class="rank-row" style="cursor:default"><span class="nm">${esc(name)}<small>median ${kr(wmedian(b.p))}</small></span><span class="v">${fmt(b.n)}</span><span class="track"><div style="width:${b.n / bmx * 100}%"></div></span></div>`).join('') : '<p class="muted small">Tradera anger märke bara i vissa kategorier.</p>';
+  const cm = new Map(); for (const s of list) for (const [name, n] of s.conds) cm.set(name, (cm.get(name) || 0) + n);
+  const crows = [...cm.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8), cmx = crows.length ? crows[0][1] : 1;
+  $('#conds').innerHTML = crows.length ? crows.map(([name, n]) => `<div class="rank-row" style="cursor:default"><span class="nm">${esc(name)}</span><span class="v">${fmt(n)}</span><span class="track"><div style="width:${n / cmx * 100}%"></div></span></div>`).join('') : '<p class="muted small">Inget skick angivet i urvalet.</p>';
+  // Budkrig och toppförsäljningar
+  const ids = new Set(list.map(s => s.sub));
+  const pick = key => (S.cat || S.sub ? list.flatMap(s => s[key].map(d => [...d, s.sub])) : ov[key]).filter(d => ids.has(d[7]));
+  $('#wars').innerHTML = itemCards(pick('wars').sort((a, b) => b[2] / Math.max(1, b[5]) - a[2] / Math.max(1, a[5])).slice(0, 12), 'wars');
+  $('#top').innerHTML = itemCards(pick('top').sort((a, b) => b[2] - a[2]).slice(0, 12), 'top');
+  drawTableT();
+}
+function drawTreeT(first) {
+  const el = $('#tree'), W = el.clientWidth, H = el.clientHeight, ov = S.ov, level = S.cat ? 'sub' : 'cat';
+  let items = level === 'cat'
+    ? ov.cats.map(c => { const l = ov.subs.filter(s => s.cat === c.value); return { key: c.value, name: c.name, v: l.reduce((x, s) => x + (s.soldWindow || 0), 0), a: aggT(l) }; })
+    : ov.subs.filter(s => s.cat === S.cat).map(s => ({ key: s.sub, name: s.name, v: s.soldWindow || 0, a: aggT([s]) }));
+  items = items.filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const metric = it => S.color === 'price' ? it.a.p50 : S.color === 'drops' ? it.a.bids : it.a.rate;
+  const mtxt = it => S.color === 'price' ? kr(metric(it)) : S.color === 'drops' ? (metric(it) != null ? String(metric(it)).replace('.', ',') + ' bud' : '–') : speedFmt(metric(it));
+  const vals = items.map(metric).filter(v => v != null).sort((a, b) => a - b);
+  el.innerHTML = '';
+  squarify(items, 0, 0, W, H).forEach((r, k) => {
+    const d = document.createElement('div'), ri = rampIndex(metric(r), vals);
+    d.className = 'tile' + (ri >= DARK_INK_FROM ? ' dark-ink' : '') + (first && !REDUCED ? ' enter' : ''); d.tabIndex = 0; d.setAttribute('role', 'listitem');
+    Object.assign(d.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px', backgroundColor: RAMP[ri] });
+    d.innerHTML = r.w > 90 && r.h > 44 ? `<b>${esc(r.name)}</b><span>${short(r.v)} sålda · ${mtxt(r)}</span>` : (r.w > 40 && r.h > 22 ? `<span>${short(r.v)}</span>` : '');
+    const tipHtml = `<b>${esc(r.name)}</b>${fmt(r.v)} sålda enligt Tradera<br>${fmt(r.a.active)} till salu · säljgrad ${speedFmt(r.a.rate)}<br>Medianpris ${r.a.approx ? 'ca ' : ''}${kr(r.a.p50)}${r.a.bids != null ? `<br>Snitt ${String(r.a.bids).replace('.', ',')} bud per auktion` : ''}`;
+    d.addEventListener('mousemove', e => showTip(e, tipHtml)); d.addEventListener('mouseleave', hideTip);
+    const go = () => { hideTip(); if (level === 'cat') { S.cat = r.key; S.sub = ''; } else S.sub = r.key; render(); };
+    d.addEventListener('click', go); d.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    el.appendChild(d);
+    if (first && !REDUCED) setTimeout(() => d.classList.remove('enter'), 60 + k * 30);
+  });
+}
+function drawRankT() {
+  const pool = S.cat ? S.ov.subs.filter(s => s.cat === S.cat) : S.ov.subs;
+  const defs = { fast: { v: s => s.soldWindow >= 100 ? rateT(s) : null, f: speedFmt }, new: { v: s => s.soldWindow, f: short },
+    dear: { v: s => s.sold30 >= 20 ? s.p[2] : null, f: kr }, drop: { v: s => s.auctions >= 20 ? s.bidsAvg : null, f: v => String(v).replace('.', ',') } };
+  const d = defs[S.rank] || defs.fast;
+  const rows = pool.map(s => ({ s, v: d.v(s) })).filter(x => x.v != null && isFinite(x.v)).sort((a, b) => b.v - a.v).slice(0, 10), mx = Math.max(...rows.map(r => r.v), 1e-9);
+  $('#rank').innerHTML = rows.length ? rows.map(r => `<button class="rank-row" data-pick="${r.s.sub}"><span class="nm">${esc(r.s.name)}<small>${esc(r.s.catName)} · ${short(r.s.soldWindow)} sålda</small></span><span class="v">${d.f(r.v)}</span>
+    <span class="track"><div style="width:${Math.max(4, r.v / mx * 100)}%"></div></span></button>`).join('') : '<p class="muted small">För lite data än.</p>';
+}
+function drawTableT() {
+  const cols = [
+    ['name', 'Underkategori', s => esc(s.name), s => s.name], ['catName', 'Kategori', s => esc(s.catName), s => s.catName],
+    ['soldWindow', 'Sålda (Tradera)', s => fmt(s.soldWindow), s => s.soldWindow || 0, 1], ['active', 'Till salu', s => fmt(s.active), s => s.active || 0, 1],
+    ['rate', 'Säljgrad', s => speedFmt(rateT(s)), rateT, 1], ['sold30', 'Sålda 30 d', s => fmt(s.sold30) + (s.complete ? '' : '*'), s => s.sold30, 1],
+    ['p50', 'Median', s => kr(s.p[2]), s => s.p[2] ?? -1, 1], ['iqr', 'Halva priserna', s => s.p[1] != null ? `${short(s.p[1])}–${short(s.p[3])}` : '–', s => s.p[3] ?? -1, 1],
+    ['bids', 'Bud', s => s.bidsAvg != null ? String(s.bidsAvg).replace('.', ',') : '–', s => s.bidsAvg ?? -1, 1], ['auc', 'Auktion', s => pct(s.types[1] + s.types[2], s.sold30), s => s.sold30 ? (s.types[1] + s.types[2]) / s.sold30 : 0, 1],
+    ['spark', '30 d', s => spark(s.endDays), null]];
+  const pool = S.cat ? S.ov.subs.filter(s => s.cat === S.cat) : S.ov.subs;
+  const c = cols.find(x => x[0] === S.sort.k && x[3]) || cols[2];
+  const rows = [...pool].sort((a, b) => { const x = c[3](a), y = c[3](b); return (typeof x === 'string' ? x.localeCompare(y, 'sv') : x - y) * S.sort.dir; });
+  $('#table').innerHTML = `<table class="table"><thead><tr>${cols.map(([k, l, , g, r]) => `<th class="${r ? 'r' : ''}" ${g ? `data-sort="${k}"` : ''} ${k === c[0] ? `aria-sort="${S.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${l}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(s => `<tr data-pick="${s.sub}" class="${s.sub === S.sub ? 'sel' : ''}">${cols.map(([k, , f, , r]) => `<td class="${r ? 'r' : ''}">${f(s)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <p class="muted small" style="margin:8px 0 0">* urval: underkategorin säljer mer än databasen hämtar per natt.</p>`;
+}
+
 // ---------- händelser ----------
 document.addEventListener('change', async e => {
   const t = e.target;
@@ -632,15 +873,16 @@ document.addEventListener('change', async e => {
   if (t.id === 'f-w') { location.search = '?w=' + encodeURIComponent(t.value); }
 });
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-period],[data-color],[data-rank],[data-pick],[data-sort],[data-go]'); if (!t) return;
+  const t = e.target.closest('[data-period],[data-color],[data-rank],[data-pick],[data-sort],[data-go],[data-src]'); if (!t) return;
+  if (t.dataset.src) { const w = S.watches.find(x => x.id === t.dataset.src); if (w && w !== S.src) openSource(w); return; }
   if (t.dataset.period != null) { S.period = +t.dataset.period; render(); return; }
-  if (t.dataset.color) { S.color = t.dataset.color; document.querySelectorAll('[data-color]').forEach(b => b.setAttribute('aria-pressed', b === t)); drawTree(); return; }
-  if (t.dataset.rank) { S.rank = t.dataset.rank; document.querySelectorAll('[data-rank]').forEach(b => b.setAttribute('aria-pressed', b === t)); drawRank(); return; }
-  if (t.dataset.sort) { const k = t.dataset.sort; S.sort = { k, dir: S.sort.k === k ? -S.sort.dir : (k === 'name' || k === 'catName' || k === 'sell' ? 1 : -1) }; drawTable(); return; }
+  if (t.dataset.color) { S.color = t.dataset.color; document.querySelectorAll('[data-color]').forEach(b => b.setAttribute('aria-pressed', b === t)); (isT() ? drawTreeT : drawTree)(); return; }
+  if (t.dataset.rank) { S.rank = t.dataset.rank; document.querySelectorAll('[data-rank]').forEach(b => b.setAttribute('aria-pressed', b === t)); (isT() ? drawRankT : drawRank)(); return; }
+  if (t.dataset.sort) { const k = t.dataset.sort; S.sort = { k, dir: S.sort.k === k ? -S.sort.dir : (k === 'name' || k === 'catName' || k === 'sell' ? 1 : -1) }; (isT() ? drawTableT : drawTable)(); return; }
   if (t.dataset.pick) { const s = subOf(t.dataset.pick); S.cat = s.cat; S.sub = s.sub; render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); return; }
   if (t.dataset.go != null) { S.cat = t.dataset.go; S.sub = ''; render(); }
 });
-let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.ov) { drawTree(); drawMap(subsIn()); } }, 200); });
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.ov) { if (isT()) drawTreeT(); else { drawTree(); drawMap(subsIn()); } } }, 200); });
 addEventListener('hashchange', () => { if (!S.ov) return; const c = S.cat, s = S.sub, p = S.period; readHash(); if (c !== S.cat || s !== S.sub || p !== S.period) render(); });
 if (!window.Chart) fail('Kunde inte ladda diagrambiblioteket. Kolla internetanslutningen.'); else boot();
 </script>

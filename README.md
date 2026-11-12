@@ -29,6 +29,20 @@ Under fliken **Databas** skapar du bevakningar: en Blocket-kategori (eller under
   frakt, antal bilder, publiceringsdag, ord i rubriken, nya och försvunna per dag, underprissatta annonser och avstånd från Spånga.
 - Databasen ligger på grenen db som en enda commit utan historik, så att repot inte växer varje natt.
 
+### Hela Blocket, Tradera och stora statistiken
+
+- **Hela Blocket** (`mode: "alla"` i data/bevakningar.json): alla underkategorier i ett område, en fil per underkategori.
+  Stockholms län är ca 335 000 annonser. Körningen delas av scripts/plan.ps1 i ca 15 parallella jobb.
+  Stora sökningar delas per kommun och sedan per prisintervall tills varje del ryms.
+- **Tradera** (`mode: "tradera"`, scripts/tradera.ps1): sålda annonser med riktiga slutpriser i hela Sverige.
+  Varje natt hämtas allt som sålts inom 8 dagar från att det lades upp, högst 8 sidor (640 st) per underkategori.
+  Antalet till salu och Traderas egen räkning av sålda hämtas för alla 485 underkategorier.
+  Kategorierna ligger i data/tradera-kategorier.json (scripts/tradera-kategorier.ps1 hämtar om dem).
+- scripts/aggregate.ps1 bygger `overview.json` (läget i dag) och `trend.json` (en rad per natt) som statistiksidan läser.
+- **statistik.html** är stora statistiken, byggd för datorskärm: nyckeltal, trädkarta, trender, pris mot fart,
+  heatmap över veckodag och timme, karta, prisfördelning, märken, fynd, budkrig och en sorterbar tabell.
+- Facebook Marketplace hämtas inte. Det kräver inloggning och Meta förbjuder automatisk insamling.
+
 ### Fotoflödet
 
 1. Du tar en bild i appen och skriver valfritt vad det är.

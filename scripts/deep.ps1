@@ -320,6 +320,11 @@ if (-not $watches.Count) { Write-Host 'Inga bevakningar att köra.'; return }
 $subFilter = @($Subs -split ',' | Where-Object { $_ })
 
 foreach ($w in $watches) {
+  if ($w.mode -eq 'tradera') {
+    # Tradera har en egen skrapa. -Subs betyder här huvudkategorier.
+    & (Join-Path $PSScriptRoot 'tradera.ps1') -Watch $w.id -Tops $Subs -DbDir $DbDir -OutDir $OutDir
+    continue
+  }
   if ($w.mode -eq 'alla') {
     Write-Host "== Hela Blocket: $($w.name) ($($w.id))" -ForegroundColor Cyan
     foreach ($cat in $cats.categories) {

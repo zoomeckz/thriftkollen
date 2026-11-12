@@ -87,6 +87,63 @@ foreach ($w in $watches | Where-Object { $_.mode -eq 'alla' }) {
   Write-Host ("{0}: {1} underkategorier, {2} aktiva annonser, {3:N1} MB" -f $w.name, $tot.subs, $tot.active, ($tot.bytes / 1MB)) -ForegroundColor Green
 }
 
+# ---------- Tradera (sålda annonser) ----------
+$tcats = Read-Json (Join-Path $DataDir 'tradera-kategorier.json')
+$tOrder = @{}; $i = 0; if ($tcats) { foreach ($c in $tcats.categories) { $tOrder[[string]$c.id] = $i++ } }
+foreach ($w in $watches | Where-Object { $_.mode -eq 'tradera' }) {
+  $dir = Join-Path $DbDir $w.id; $sumDir = Join-Path $dir 'sum'
+  if (-not (Test-Path $sumDir)) { continue }
+  $sums = @(Get-ChildItem $sumDir -Filter *.json | ForEach-Object { Read-Db $_.FullName } | Where-Object { $_ })
+  if (-not $sums.Count) { continue }
+  $sums = @($sums | Sort-Object { $tOrder[[string]$_['cat']] }, { -[int]$_['sold30'] })
+  $day = ($sums | ForEach-Object { [int]$_['day'] } | Measure-Object -Maximum).Maximum
+  $tot = [ordered]@{ subs = $sums.Count; active = 0; soldWindow = 0; sold30 = 0; soldWeek = 0; soldToday = 0; value = [int64]0; auctions = 0; overStart = 0; company = 0; freeShip = 0; sampled = 0 }
+  $wdhr = New-Object int[] 168; $endDays = New-Object int[] 30; $types = New-Object int[] 5; $hist = New-Object int[] (@($sums[0]['hist']).Count)
+  $hpN = New-Object int[] 24; $hpMed = @(0..23 | ForEach-Object { , [System.Collections.Generic.List[object]]::new() })
+  foreach ($s in $sums) {
+    foreach ($k in 'active', 'soldWindow', 'sold30', 'soldWeek', 'soldToday', 'auctions', 'overStart', 'company', 'freeShip') { $tot[$k] += [int]$s[$k] }
+    $tot.value += [int64]$s['value']; if (-not $s['complete']) { $tot.sampled++ }
+    for ($j = 0; $j -lt 168; $j++) { $wdhr[$j] += [int]$s['wdhr'][$j] }
+    for ($j = 0; $j -lt 30; $j++) { $endDays[$j] += [int]$s['endDays'][$j] }
+    for ($j = 0; $j -lt 5; $j++) { $types[$j] += [int]$s['types'][$j] }
+    for ($j = 0; $j -lt $hist.Count; $j++) { $hist[$j] += [int]$s['hist'][$j] }
+    for ($j = 0; $j -lt 24; $j++) { $hp = $s['hourPrice'][$j]; $hpN[$j] += [int]$hp[0]; if ($null -ne $hp[1]) { $hpMed[$j].Add(@([int]$hp[1], [int]$hp[0])) } }
+  }
+  # Viktad median av underkategoriernas medianpris per sluttimme
+  $hourPrice = @(0..23 | ForEach-Object { $l = @($hpMed[$_] | Sort-Object { $_[0] }); $tw = ($l | ForEach-Object { $_[1] } | Measure-Object -Sum).Sum; $acc = 0; $m = $null
+      foreach ($x in $l) { $acc += $x[1]; if ($acc -ge $tw / 2) { $m = $x[0]; break } }; , @($hpN[$_], $m) })
+  $top = @($sums | ForEach-Object { $s = $_; foreach ($d in $s['top']) { , (@($d) + @($s['sub'])) } } | Sort-Object { -[int]$_[2] } | Select-Object -First 40)
+  $wars = @($sums | ForEach-Object { $s = $_; foreach ($d in $s['wars']) { , (@($d) + @($s['sub'])) } } | Sort-Object { -([double]$_[2] / [math]::Max(1, [double]$_[5])) } | Select-Object -First 40)
+  $overview = [ordered]@{
+    v = 1; source = 'tradera'; id = $w.id; name = $w.name; day = $day; days = $(if ($w.days) { $w.days } else { 8 })
+    updatedAt = (Get-Date).ToUniversalTime().ToString('o'); imgBase = 'https://img.tradera.net/250-square/'; urlBase = 'https://www.tradera.com/item/'
+    typeNames = @('', 'Auktion', 'Auktion med köp nu', 'Köp nu', 'Butik')
+    totals = $tot; wdhr = $wdhr; endDays = $endDays; types = $types; histBands = $sums[0]['histBands']; hist = $hist; hourPrice = $hourPrice
+    cats = @($tcats.categories | ForEach-Object { [ordered]@{ value = [string]$_.id; name = $_.name } })
+    top = $top; wars = $wars
+    subs = @($sums | ForEach-Object { $s = $_; $o = [ordered]@{}; foreach ($k in $s.Keys) { $o[$k] = $s[$k] }; $o['sub'] = [string]$s['sub']; $o['cat'] = [string]$s['cat']; $o })
+  }
+  Write-Db (Join-Path $dir 'overview.json') $overview
+
+  $trendFile = Join-Path $dir 'trend.json'; $trend = Read-Db $trendFile
+  $series = @{}
+  if ($trend -and $trend['subs']) { foreach ($k in $trend['subs'].Keys) { $series[$k] = [System.Collections.ArrayList]@($trend['subs'][$k] | Where-Object { [int]$_[0] -ne $day }) } }
+  $totSeries = [System.Collections.ArrayList]@(); if ($trend -and $trend['total']) { foreach ($r in $trend['total']) { if ([int]$r[0] -ne $day) { [void]$totSeries.Add($r) } } }
+  foreach ($s in $sums) {
+    if ([int]$s['day'] -ne $day) { continue }
+    $k = [string]$s['sub']; if (-not $series.ContainsKey($k)) { $series[$k] = [System.Collections.ArrayList]@() }
+    [void]$series[$k].Add(@($day, $s['active'], $s['soldWindow'], $s['soldToday'], $s['p'][2], $s['soldWeek'], $s['bidsAvg']))
+  }
+  [void]$totSeries.Add(@($day, $tot.active, $tot.soldWindow, $tot.soldToday, $null, $tot.soldWeek, $null))
+  $subsOut = [ordered]@{}; foreach ($k in $series.Keys) { $subsOut[$k] = @($series[$k] | Sort-Object { [int]$_[0] } | Select-Object -Last 400) }
+  Write-Db $trendFile ([ordered]@{ v = 1; cols = @('day', 'active', 'soldWindow', 'soldToday', 'p50', 'soldWeek', 'bidsAvg'); total = @($totSeries | Sort-Object { [int]$_[0] } | Select-Object -Last 400); subs = $subsOut })
+
+  $bytes = (Get-ChildItem $dir -Filter *.json | Measure-Object Length -Sum).Sum
+  $index[$w.id] = [ordered]@{ id = $w.id; name = $w.name; mode = 'tradera'; updatedAt = $overview.updatedAt; active = $tot.sold30; total = $tot.sold30
+    gone = 0; median = $null; complete = $true; secs = 0; bytes = $bytes; subs = $tot.subs }
+  Write-Host ("{0}: {1} underkategorier, {2} sålda senaste 30 d i databasen" -f $w.name, $tot.subs, $tot.sold30) -ForegroundColor Green
+}
+
 # Ta bort borttagna bevakningar ur index och databas.
 foreach ($id in @($index.Keys)) {
   if (-not $valid.ContainsKey($id)) {

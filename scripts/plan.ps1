@@ -17,7 +17,7 @@ if ($Watch -eq 'nya') { $watches = @($watches | Where-Object { -not $known.Conta
 elseif ($Watch -and $Watch -ne 'alla') { $ids = $Watch -split ','; $watches = @($watches | Where-Object { $ids -contains $_.id }) }
 
 $include = [System.Collections.Generic.List[object]]::new()
-$plain = @($watches | Where-Object { $_.mode -ne 'alla' })
+$plain = @($watches | Where-Object { $_.mode -ne 'alla' -and $_.mode -ne 'tradera' })
 if ($plain.Count) { $include.Add([ordered]@{ name = "Bevakningar ($($plain.Count))"; watch = (($plain | ForEach-Object { $_.id }) -join ','); subs = '' }) }
 
 foreach ($w in $watches | Where-Object { $_.mode -eq 'alla' }) {
@@ -43,6 +43,18 @@ foreach ($w in $watches | Where-Object { $_.mode -eq 'alla' }) {
     $k++
     $include.Add([ordered]@{ name = "$($w.name) $k/$count (~$([math]::Round($b.n / 1000))k)"; watch = $w.id; subs = ($b.subs -join ',') })
   }
+}
+
+# Tradera: dela huvudkategorierna på 4 jobb efter uppskattat antal sidor (sålda per 8 dagar, max 8 sidor per underkategori).
+foreach ($w in $watches | Where-Object { $_.mode -eq 'tradera' }) {
+  $tc = Read-Json (Join-Path $DataDir 'tradera-kategorier.json')
+  $maxP = if ($w.maxPages) { [int]$w.maxPages } else { 8 }
+  $tops = @($tc.categories | ForEach-Object { $n = 2; foreach ($s in $_.subs) { $n += [math]::Min($maxP, [math]::Ceiling(([int]$s.sold / 210 * 8) / 80) + 1) }; [pscustomobject]@{ id = [string]$_.id; n = $n } })
+  $count = 4
+  $bins = @(1..$count | ForEach-Object { @{ n = 0; subs = [System.Collections.Generic.List[string]]::new() } })
+  foreach ($t in $tops | Sort-Object n -Descending) { $b = $bins | Sort-Object { $_.n } | Select-Object -First 1; $b.n += $t.n; $b.subs.Add($t.id) }
+  $k = 0
+  foreach ($b in $bins | Where-Object { $_.subs.Count }) { $k++; $include.Add([ordered]@{ name = "$($w.name) $k/$count (~$($b.n) sidor)"; watch = $w.id; subs = ($b.subs -join ',') }) }
 }
 
 $json = $script:Ser.Serialize((ConvertTo-Plain ([ordered]@{ include = $include.ToArray() })))

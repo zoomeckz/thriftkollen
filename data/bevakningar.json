@@ -13,6 +13,17 @@
         "createdAt":  "2026-11-12T14:09:37.3052269Z"
     },
     {
+        "id":  "tradera",
+        "name":  "Tradera · sålda, hela Sverige",
+        "mode":  "tradera",
+        "categoryName":  "Alla kategorier",
+        "days":  8,
+        "keepDays":  30,
+        "maxPages":  8,
+        "enabled":  true,
+        "createdAt":  "2026-11-12T14:25:16.3236459Z"
+    },
+    {
         "id":  "cykelstolar-stockholm",
         "name":  "Bil- och cykelstolar · Stockholm",
         "category":  "1.68.3911",
