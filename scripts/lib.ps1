@@ -5,6 +5,8 @@ $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ProgressPreference = 'SilentlyContinue'
+# Utan detta skriver PowerShell 5.1 ibland listor som {"value":[...],"Count":n} i JSON.
+Remove-TypeData System.Array -ErrorAction SilentlyContinue
 
 $script:RepoRoot = Split-Path -Parent $PSScriptRoot
 $script:DataDir  = Join-Path $script:RepoRoot 'data'

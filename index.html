@@ -169,6 +169,12 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 /* Foto */
 .shot { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: start; }
 .shot img.photo { width: 120px; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
+.filters > summary { cursor: pointer; list-style: none; padding: 10px 0 2px; }
+.filters > summary::-webkit-details-marker { display: none; }
+.filters > summary::after { content: " ▾"; color: var(--muted); }
+.filters[open] > summary::after { content: " ▴"; }
+.filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px 12px; margin-top: 12px; }
+@media (max-width: 480px) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .photo-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .batch { display: grid; gap: 10px; }
 .batch-item { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
@@ -236,6 +242,7 @@ details.panel[open] > summary::after { content: " ▴"; }
         <a href="#fynd" data-tab="fynd">Katalog</a>
         <a href="#foto" data-tab="foto">Fota<span class="dot" id="pendingDot" hidden></span></a>
         <a href="#lager" data-tab="lager">Lager</a>
+        <a href="#databas" data-tab="databas">Databas</a>
         <a href="#statistik" data-tab="statistik">Statistik</a>
         <a href="#installningar" data-tab="installningar">Inställningar</a>
       </nav>
@@ -249,6 +256,7 @@ details.panel[open] > summary::after { content: " ▴"; }
   <section data-view="foto" id="v-foto" hidden></section>
   <section data-view="lager" id="v-lager" hidden></section>
   <section data-view="statistik" id="v-statistik" hidden></section>
+  <section data-view="databas" id="v-databas" hidden></section>
   <section data-view="installningar" id="v-installningar" hidden></section>
 </main>
 <div id="sheet"></div>
@@ -263,7 +271,7 @@ details.panel[open] > summary::after { content: " ▴"; }
 const CATS = ['Möbler & stolar', 'Porslin & glas', 'Elektronik & retro', 'Kläder & märken', 'Barn & fritid', 'Övrigt'];
 const DEFAULT_CFG = { minProfit: 100, minMult: 2, mode: 'any', valuation: 'bal', platform: 'tradera',
   traderaPct: 10, traderaMin: 3, traderaCap: 200, blocketFee: 0, haggle: 20 };
-const TABS = ['fynd', 'foto', 'lager', 'statistik', 'installningar'];
+const TABS = ['fynd', 'foto', 'lager', 'databas', 'statistik', 'installningar'];
 
 // ---------- lagring på enheten ----------
 const store = {
@@ -287,7 +295,9 @@ const gh = Object.assign({ branch: 'main' }, guessRepo(), ghSaved, { token: toke
 
 const S = { terms: new Map(), fynd: [], meta: null, inv: store.get('tk-inventory', []), cfg: { ...DEFAULT_CFG, ...store.get('tk-settings', {}) },
   pending: store.get('tk-pending', []), state: 'loading', loadErr: null, tab: 'fynd', cat: store.get('tk-cat', 'Alla'), sort: store.get('tk-sort', 'max'),
-  q: '', price: null, open: null, confirm: null, photos: [], photoCat: '', uploading: false, run: null, fyndPrice: {}, auth: null, menuOpen: false };
+  q: '', price: null, open: null, confirm: null, photos: [], photoCat: '', uploading: false, run: null, fyndPrice: {}, auth: null, menuOpen: false,
+  watches: null, dbIndex: new Map(), bcats: null, dbSel: store.get('tk-dbsel', null), db: null, dbLoading: false, dbMetaLoaded: false, dbMetaLoading: false, dbShowForm: false, dbLimit: 60,
+  dbFilter: { status: 'active', cond: '', reg: '', seller: '', brand: '', min: '', max: '', km: '', q: '', sort: 'new' } };
 
 // ---------- hjälpare ----------
 const $ = (s, r = document) => r.querySelector(s);
@@ -343,6 +353,9 @@ async function updateRepoJson(path, mutate, message) {
 }
 async function dispatchScrape() {
   await api(repoPath('/actions/workflows/scrape.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { full: true } } });
+}
+async function dispatchDb(id) {
+  await api(repoPath('/actions/workflows/databas.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { bevakning: id } } });
 }
 async function latestRun() {
   try { const r = await api(repoPath('/actions/workflows/scrape.yml/runs?per_page=1')); return r.workflow_runs && r.workflow_runs[0]; } catch { return null; }
@@ -747,6 +760,191 @@ function renderStats() {
       ${gap.map(x => `<tr data-open="${esc(x.t.id)}" style="cursor:pointer"><td style="text-transform:capitalize">${esc(x.t.q)}</td><td class="r">${kr(x.v.tv)}</td><td class="r">${kr(x.t.blocket.stats.med)}</td><td class="r">x${x.ratio.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 }
 
+// ---------- vy: Databas (djupscrape av hela kategorier) ----------
+const HOME = { lat: 59.39, lon: 17.905 };   // Spånga
+const COND_NAMES = ['', 'Nytt', 'Som nytt', 'Bra skick', 'Okej skick', 'Trasigt'];
+const WEEKDAYS = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'];
+const STOP = new Set('och med for för till som det den att barn bra nytt ny nya sälj säljes stol stolar från utan med på i av en ett is the and'.split(' '));
+async function readDbFile(path) {
+  if (gh.token && gh.owner) {
+    try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=db`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; }
+  }
+  if (!gh.owner) { const l = await fetch(`./dbdata/${path}`, { cache: 'no-store' }).catch(() => null); return l && l.ok ? l.json() : null; }   // lokal förhandsvisning
+  const r = await fetch(`https://raw.githubusercontent.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/db/${path}`, { cache: 'no-store' });
+  return r.ok ? r.json() : null;
+}
+async function loadDbMeta() {
+  S.dbMetaLoading = true; render();
+  const [w, idx, cats] = await Promise.all([readRepoJson('data/bevakningar.json').catch(() => []), readDbFile('index.json').catch(() => null), S.bcats ? S.bcats : readRepoJson('data/blocket-kategorier.json').catch(() => null)]);
+  S.watches = w || []; S.dbIndex = new Map(((idx && idx.watches) || []).map(x => [x.id, x])); S.bcats = cats; S.dbMetaLoading = false; S.dbMetaLoaded = true;
+  if (!S.dbSel && S.watches.length) S.dbSel = S.watches[0].id;
+  render();
+  if (S.dbSel) loadDb(S.dbSel);
+}
+async function loadDb(id) {
+  if (S.db && S.db.watch && S.db.watch.id === id) return;
+  S.dbSel = id; S.db = null; S.dbLoading = true; render();
+  try { S.db = await readDbFile(`${id}.json`); } catch { S.db = null; }
+  S.dbLoading = false; render();
+}
+function dbRows() {
+  const d = S.db; if (!d) return [];
+  const ix = {}; d.cols.forEach((c, i) => ix[c] = i);
+  if (!d._rows) d._rows = d.rows.map(r => {
+    const pubDay = Math.floor(r[ix.pub] / 86400), gone = r[ix.gone] || 0, ph = Array.isArray(r[ix.ph]) ? r[ix.ph] : [];
+    const lat = r[ix.lat], lon = r[ix.lon];
+    const km = lat != null && lon != null ? Math.hypot((lat - HOME.lat) * 111, (lon - HOME.lon) * 111 * Math.cos(HOME.lat * Math.PI / 180)) : null;
+    const pub = new Date(r[ix.pub] * 1000);
+    return { id: r[ix.id], t: r[ix.t] || '', p: r[ix.p], p0: r[ix.p0], img: r[ix.img] ? d.imgBase + r[ix.img] : '', n: r[ix.n], loc: r[ix.loc] || '', reg: r[ix.reg] || '',
+      brand: r[ix.brand] || '', cond: r[ix.cond] || 0, fl: r[ix.fl] || 0, pubDay, first: r[ix.first], last: r[ix.last], gone, ph, km,
+      days: gone ? gone - pubDay : null, age: (d.today || 0) - pubDay, drop: r[ix.p] < r[ix.p0] ? (r[ix.p0] - r[ix.p]) / r[ix.p0] : 0,
+      wd: pub.getDay(), hr: pub.getHours(), u: d.urlBase + r[ix.id] };
+  });
+  return d._rows;
+}
+const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor((s.length - 1) / 2)]; };
+const pct = (a, b) => b ? Math.round(a / b * 100) + ' %' : '–';
+function groupStats(rows, keyFn, minN = 3) {
+  const m = new Map();
+  for (const r of rows) { const k = keyFn(r); if (k == null || k === '') continue; if (!m.has(k)) m.set(k, []); m.get(k).push(r); }
+  return [...m.entries()].map(([k, rs]) => {
+    const act = rs.filter(r => !r.gone), gone = rs.filter(r => r.gone);
+    return { k, n: rs.length, act: act.length, gone: gone.length, med: med(rs.filter(r => r.p > 0).map(r => r.p)), days: med(gone.map(r => r.days).filter(x => x >= 0)) };
+  }).filter(g => g.n >= minN).sort((a, b) => b.n - a.n);
+}
+function statTable(title, hint, groups, label, limit = 12) {
+  if (!groups.length) return '';
+  const maxN = Math.max(...groups.map(g => g.n));
+  return `<div class="panel"><div class="spread"><h3>${title}</h3>${hint ? `<span class="muted small">${hint}</span>` : ''}</div>
+    <div class="scroll-x"><table class="table"><thead><tr><th>${label}</th><th class="r">Antal</th><th class="r">Median</th><th class="r">Försvunna</th><th class="r">Säljtid</th></tr></thead><tbody>
+    ${groups.slice(0, limit).map(g => `<tr><td><div style="display:grid;gap:4px"><span style="text-transform:capitalize">${esc(g.k)}</span><div class="bar" style="width:${Math.max(3, g.n / maxN * 100)}%;height:4px"></div></div></td>
+      <td class="r">${g.n}</td><td class="r">${kr(g.med)}</td><td class="r">${pct(g.gone, g.n)}</td><td class="r">${g.days != null ? g.days + ' d' : '–'}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function filteredDbRows() {
+  const f = S.dbFilter, rows = dbRows(), q = norm(f.q || '');
+  return rows.filter(r => (f.status === 'all' || (f.status === 'active' ? !r.gone : r.gone)) &&
+    (!f.cond || r.cond === +f.cond) && (!f.reg || r.reg === f.reg) && (!f.seller || (f.seller === 'f' ? r.fl & 4 : !(r.fl & 4))) &&
+    (!f.brand || r.brand === f.brand) && (!f.min || r.p >= +f.min) && (!f.max || r.p <= +f.max) && (!f.km || (r.km != null && r.km <= +f.km)) &&
+    (!q || norm(r.t).includes(q)));
+}
+function renderDatabas() {
+  const el = $('#v-databas');
+  if (!S.dbMetaLoaded) { el.innerHTML = `<div class="empty muted"><span class="spinner"></span>Hämtar databasen…</div>`; if (!S.dbMetaLoading) loadDbMeta(); return; }
+  const watches = S.watches || [];
+  const list = watches.map(w => { const i = S.dbIndex.get(w.id);
+    return `<button class="chip" data-dbsel="${esc(w.id)}" aria-pressed="${S.dbSel === w.id}">${esc(w.name)}${i ? ` · ${i.active.toLocaleString('sv-SE')}` : ' · väntar'}</button>`; }).join('');
+  el.innerHTML = `
+    <div class="panel">
+      <div class="spread"><h2>Databas</h2><button class="btn small" data-dbform="1">${S.dbShowForm ? 'Stäng' : '+ Ny bevakning'}</button></div>
+      <p class="muted small">Hämtar alla annonser i en Blocket-kategori varje natt. Annonser som försvinner räknas som sålda eller borttagna, och det ger säljtid och säljtakt.</p>
+      ${watches.length ? `<div class="chips">${list}</div>` : '<p class="muted">Inga bevakningar än. Skapa en med knappen ovan.</p>'}
+      ${S.dbShowForm ? watchFormHTML() : ''}
+    </div>
+    ${S.dbSel ? dbViewHTML() : ''}`;
+}
+function watchFormHTML() {
+  const cats = (S.bcats && S.bcats.categories) || [], regs = (S.bcats && S.bcats.regions) || [];
+  const opts = cats.map(c => `<option value="category|${c.value}|${esc(c.name)}">${esc(c.name)} (${c.hits.toLocaleString('sv-SE')})</option>` +
+    c.subs.map(s => `<option value="${s.param}|${s.value}|${esc(c.name + ' › ' + s.name)}">  › ${esc(s.name)} (${s.hits.toLocaleString('sv-SE')})</option>`).join('')).join('');
+  return `<form id="watchForm" class="form-grid" style="border-top:1px solid var(--line);padding-top:16px">
+    <div class="field" style="grid-column:1/-1"><label for="w-cat">Kategori</label><select id="w-cat"><option value="">Alla kategorier (kräver sökord)</option>${opts}</select></div>
+    <div class="field"><label for="w-reg">Område</label><select id="w-reg"><option value="">Hela Sverige</option>${regs.map(r => `<option value="${r.value}|${esc(r.name)}" ${r.name === 'Stockholm' ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="w-q">Sökord (valfritt)</label><input id="w-q" type="text" placeholder="t.ex. thule"></div>
+    <div class="field"><label for="w-min">Pris från</label><input id="w-min" type="number" min="0" inputmode="numeric"></div>
+    <div class="field"><label for="w-max">Pris till</label><input id="w-max" type="number" min="0" inputmode="numeric"></div>
+    <div class="field"><label for="w-cap">Max annonser</label><input id="w-cap" type="number" min="100" max="40000" value="15000"></div>
+    <div class="field" style="grid-column:1/-1"><label for="w-name">Namn</label><input id="w-name" type="text" placeholder="Fylls i automatiskt"></div>
+    <label class="row small login"><input type="checkbox" id="w-cond" checked> Hämta skick (tar ungefär dubbelt så lång tid)</label>
+    <button class="btn primary" type="submit" ${gh.token ? '' : 'disabled'}>Skapa och kör</button>
+    <p class="muted small" style="grid-column:1/-1">Ungefär 1 minut per 2 000 annonser på GitHub. Stora kategorier delas upp per län och prisintervall. Ett område i taget brukar räcka för att hitta flippar nära dig.</p>
+  </form>`;
+}
+function dbViewHTML() {
+  const w = (S.watches || []).find(x => x.id === S.dbSel), idx = S.dbIndex.get(S.dbSel);
+  if (!w) return '';
+  const head = `<div class="spread"><div><div class="lbl">${esc(w.categoryName || 'Alla kategorier')}${w.locationName ? ' · ' + esc(w.locationName) : ''}${w.q ? ' · ”' + esc(w.q) + '”' : ''}</div>
+      <h2>${esc(w.name)}</h2>${idx ? `<div class="muted small">Uppdaterad ${when(idx.updatedAt)} · ${(idx.bytes / 1048576).toFixed(1)} MB${idx.complete ? '' : ' · ofullständig körning'}</div>` : ''}</div>
+      <div class="row"><button class="btn small" data-dbrun="${esc(w.id)}" ${gh.token ? '' : 'disabled'}>Kör nu</button>
+      <button class="btn small danger" data-dbdel="${esc(w.id)}" ${gh.token ? '' : 'disabled'}>${S.confirm === 'w:' + w.id ? 'Säker?' : 'Ta bort'}</button></div></div>`;
+  if (S.dbLoading) return `<div class="panel">${head}<div class="empty muted"><span class="spinner"></span>Laddar annonserna…</div></div>`;
+  if (!S.db) return `<div class="panel">${head}<p class="muted">Ingen data än. Första körningen tar några minuter. Tryck ”Kör nu” om den inte redan har startat.</p></div>`;
+  const all = dbRows(), rows = filteredDbRows(), f = S.dbFilter;
+  const act = rows.filter(r => !r.gone), gone = rows.filter(r => r.gone);
+  const today = S.db.today, gone30 = gone.filter(r => today - r.gone <= 30);
+  const sellDays = gone.map(r => r.days).filter(d => d >= 0);
+  const dropped = act.filter(r => r.drop > 0);
+  const regs = [...new Set(all.map(r => r.reg).filter(Boolean))].sort();
+  const brands = groupStats(all, r => r.brand, 1).slice(0, 60).map(g => g.k).sort((a, b) => a.localeCompare(b, 'sv'));
+  const runs = (S.db.runs || []).slice(-30);
+  const histBands = [0, 100, 250, 500, 1000, 2000, 5000, Infinity];
+  const hist = histBands.slice(0, -1).map((lo, i) => ({ k: `${lo}–${histBands[i + 1] === Infinity ? '' : histBands[i + 1] - 1}`, n: act.filter(r => r.p >= lo && r.p < histBands[i + 1]).length }));
+  const hmax = Math.max(1, ...hist.map(h => h.n));
+  // Underprissatta: aktiva annonser långt under medianen för samma märke (eller hela urvalet).
+  const brandMed = new Map(groupStats(act, r => r.brand, 4).map(g => [g.k, g.med]));
+  const allMed = med(act.filter(r => r.p > 0).map(r => r.p));
+  const cheap = act.filter(r => r.p > 0).map(r => ({ r, ref: brandMed.get(r.brand) || allMed })).filter(x => x.ref && x.r.p <= x.ref * 0.5 && x.r.p >= 50 && x.r.p >= x.ref * 0.12).sort((a, b) => a.r.p / a.ref - b.r.p / b.ref).slice(0, 12);
+  const words = new Map(); for (const r of rows) for (const wd of new Set(norm(r.t).split(' '))) if (wd.length >= 3 && !STOP.has(wd) && !/^\d+$/.test(wd)) { if (!words.has(wd)) words.set(wd, []); words.get(wd).push(r); }
+  const wordGroups = [...words.entries()].filter(([, rs]) => rs.length >= 5).map(([k, rs]) => ({ k, n: rs.length, gone: rs.filter(r => r.gone).length, med: med(rs.filter(r => r.p > 0).map(r => r.p)), days: med(rs.filter(r => r.gone).map(r => r.days).filter(d => d >= 0)) })).sort((a, b) => b.n - a.n);
+  const sortKey = { new: (a, b) => b.pubDay - a.pubDay, cheap: (a, b) => a.p - b.p, dear: (a, b) => b.p - a.p, near: (a, b) => (a.km ?? 1e9) - (b.km ?? 1e9), drop: (a, b) => b.drop - a.drop }[f.sort] || ((a, b) => b.pubDay - a.pubDay);
+  const shown = [...rows].sort(sortKey).slice(0, S.dbLimit);
+  const runBars = runs.length > 1 ? `<div class="panel"><div class="spread"><h3>Nya och försvunna per dag</h3><span class="muted small">Senaste ${runs.length} körningarna</span></div>
+    <div class="scroll-x"><svg viewBox="0 0 ${runs.length * 22 + 30} 120" style="min-width:${Math.min(600, runs.length * 22 + 30)}px;width:100%">${(() => { const mx = Math.max(1, ...runs.map(r => Math.max(r.new || 0, r.gone || 0)));
+      return runs.map((r, i) => `<rect x="${20 + i * 22}" y="${100 - (r.new || 0) / mx * 90}" width="8" height="${(r.new || 0) / mx * 90}" fill="var(--good)"><title>${r.new} nya</title></rect>
+        <rect x="${29 + i * 22}" y="${100 - (r.gone || 0) / mx * 90}" width="8" height="${(r.gone || 0) / mx * 90}" fill="var(--bad)"><title>${r.gone} försvunna</title></rect>`).join('') + `<line x1="16" x2="${runs.length * 22 + 26}" y1="100" y2="100" stroke="var(--line)"/><text x="16" y="116" class="small" fill="var(--muted)" font-size="11">Grön = nya, röd = försvunna</text>`; })()}</svg></div></div>` : '';
+  const sel = (id, label, opts, val) => `<div class="field"><label for="${id}">${label}</label><select id="${id}" data-dbf="${id.slice(3)}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(val ?? '') === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`;
+  const nf = ["cond", "reg", "seller", "brand", "min", "max", "km", "q"].filter(k => f[k]).length + (f.status !== "active" ? 1 : 0);
+  return `<div class="panel">${head}
+    <details class="filters" ${S.dbFiltersOpen ? "open" : ""} data-dbfilters="1"><summary><b>Filter</b>${nf ? ` <span class="pill price-chip">${nf} aktiva</span>` : ""} <span class="muted small">· ${rows.length.toLocaleString("sv-SE")} annonser</span></summary>
+    <div class="filter-grid">
+      ${sel('df-status', 'Status', [['active', 'Aktiva'], ['gone', 'Försvunna (sålda)'], ['all', 'Alla']], f.status)}
+      ${sel('df-cond', 'Skick', [['', 'Alla']].concat(COND_NAMES.slice(1).map((n, i) => [i + 1, n])), f.cond)}
+      ${regs.length > 1 ? sel('df-reg', 'Län', [['', 'Alla']].concat(regs.map(r => [r, r])), f.reg) : ''}
+      ${sel('df-seller', 'Säljare', [['', 'Alla'], ['p', 'Privat'], ['f', 'Företag']], f.seller)}
+      ${sel('df-brand', 'Märke', [['', 'Alla']].concat(brands.map(b => [b, b])), f.brand)}
+      <div class="field"><label for="df-min">Pris från</label><input id="df-min" data-dbf="min" type="number" inputmode="numeric" value="${esc(f.min)}"></div>
+      <div class="field"><label for="df-max">Pris till</label><input id="df-max" data-dbf="max" type="number" inputmode="numeric" value="${esc(f.max)}"></div>
+      <div class="field"><label for="df-km">Max km från Spånga</label><input id="df-km" data-dbf="km" type="number" inputmode="numeric" value="${esc(f.km)}"></div>
+      <div class="field" style="grid-column:1/-1"><label for="df-q">Sök i rubrik</label><input id="df-q" data-dbf="q" type="search" value="${esc(f.q)}" placeholder="t.ex. isofix"></div>
+    </div></details></div>
+    <div class="tiles">
+      <div class="tile"><span>I urvalet</span><b class="num">${rows.length.toLocaleString('sv-SE')}</b><span>${act.length.toLocaleString('sv-SE')} aktiva, ${gone.length.toLocaleString('sv-SE')} försvunna</span></div>
+      <div class="tile"><span>Medianpris, aktiva</span><b class="num">${kr(med(act.filter(r => r.p > 0).map(r => r.p)))}</b><span>${kr(med(gone.filter(r => r.p > 0).map(r => r.p)))} för försvunna</span></div>
+      <div class="tile"><span>Säljtid (median)</span><b class="num">${sellDays.length ? med(sellDays) + ' d' : '–'}</b><span>från publicering till försvunnen</span></div>
+      <div class="tile"><span>Försvunna senaste 30 d</span><b class="num">${gone30.length.toLocaleString('sv-SE')}</b><span>säljgrad ${pct(gone30.length, gone30.length + act.length)}</span></div>
+      <div class="tile"><span>Har sänkt priset</span><b class="num">${pct(dropped.length, act.length)}</b><span>${dropped.length ? 'snitt −' + Math.round(dropped.reduce((s, r) => s + r.drop, 0) / dropped.length * 100) + ' %' : 'inga sänkningar än'}</span></div>
+      <div class="tile"><span>Kan skickas</span><b class="num">${pct(act.filter(r => r.fl & 1).length, act.length)}</b><span>${pct(act.filter(r => r.fl & 4).length, act.length)} är företag</span></div>
+      <div class="tile"><span>Snittålder, aktiva</span><b class="num">${act.length ? med(act.map(r => r.age)) + ' d' : '–'}</b><span>dagar sedan publicering</span></div>
+      <div class="tile"><span>Bilder per annons</span><b class="num">${act.length ? med(act.map(r => r.n)) : '–'}</b><span>median</span></div>
+    </div>
+    ${sellDays.length < 5 ? `<div class="note small">Säljtid och säljgrad fylls på efter några nätter, när annonser hunnit försvinna. Databasen körs varje natt kl 04.</div>` : ''}
+    ${cheap.length ? `<div class="panel"><div class="spread"><h3>Underprissatta just nu</h3><span class="muted small">Minst 50 % under medianen för samma märke. Pris under 50 kr räknas inte, det betyder oftast ”bud”.</span></div>
+      <div class="listings">${cheap.map(({ r, ref }) => listingCard(r, `−${Math.round((1 - r.p / ref) * 100)} %`)).join('')}</div></div>` : ''}
+    ${runBars}
+    <div class="panel"><h3>Prisfördelning, aktiva</h3>${hist.map(h => `<div class="barrow"><span class="lab">${h.k} kr</span><div class="bar" style="width:${Math.max(2, h.n / hmax * 100)}%"></div><span class="num" style="text-align:right">${h.n}</span></div>`).join('')}</div>
+    ${statTable('Per skick', 'Skick påverkar priset mest', groupStats(rows, r => r.cond ? COND_NAMES[r.cond] : null, 1), 'Skick')}
+    ${statTable('Per märke', '', groupStats(rows, r => r.brand), 'Märke')}
+    ${statTable('Per ort', '', groupStats(rows, r => r.loc), 'Ort')}
+    ${regs.length > 1 ? statTable('Per län', '', groupStats(rows, r => r.reg), 'Län', 21) : ''}
+    ${statTable('Privat eller företag', '', groupStats(rows, r => r.fl & 4 ? 'Företag' : 'Privat', 1), 'Säljare')}
+    ${statTable('Frakt', 'Säljs annonser med frakt snabbare?', groupStats(rows, r => r.fl & 1 ? 'Kan skickas' : 'Endast upphämtning', 1), 'Leverans')}
+    ${statTable('Antal bilder', 'Fler bilder, snabbare försäljning?', groupStats(rows, r => r.n <= 1 ? '1 bild' : r.n <= 3 ? '2–3 bilder' : r.n <= 6 ? '4–6 bilder' : '7+ bilder', 1), 'Bilder')}
+    ${statTable('Publiceringsdag', 'Vilken dag lönar det sig att lägga upp?', groupStats(rows, r => WEEKDAYS[r.wd], 1).sort((a, b) => WEEKDAYS.indexOf(a.k) - WEEKDAYS.indexOf(b.k)), 'Dag', 7)}
+    ${statTable('Ord i rubriken', 'Vanligaste orden och deras pris', wordGroups, 'Ord', 15)}
+    <div class="panel"><div class="spread"><h3>Annonser (${rows.length.toLocaleString('sv-SE')})</h3>
+      ${sel('df-sort', 'Sortera', [['new', 'Nyast'], ['cheap', 'Billigast'], ['dear', 'Dyrast'], ['near', 'Närmast Spånga'], ['drop', 'Störst prissänkning']], f.sort)}</div>
+      <div class="listings">${shown.map(r => listingCard(r)).join('')}</div>
+      ${rows.length > shown.length ? `<button class="btn" data-dbmore="1">Visa fler (${(rows.length - shown.length).toLocaleString('sv-SE')} kvar)</button>` : ''}
+    </div>`;
+}
+function listingCard(r, badge) {
+  const status = r.gone ? `<span class="pill slow">Borta efter ${r.days} d</span>` : `<span class="pill">${r.age} d</span>`;
+  return `<a class="listing" href="${esc(r.u)}" target="_blank" rel="noopener">${r.img ? imgTag(r.img) : '<div style="aspect-ratio:1;border-radius:8px;background:var(--surface-2)"></div>'}
+    <div class="p"><span class="num">${kr(r.p)}${r.drop ? ` <s class="muted" style="font-weight:500">${kr(r.p0)}</s>` : ''}</span>${badge ? `<span class="pill fast">${badge}</span>` : ''}</div>
+    <div class="t">${esc(r.t)}</div>
+    <div class="meta">${status}<span class="pill">${esc(r.loc)}${r.km != null ? ' · ' + Math.round(r.km) + ' km' : ''}</span>${r.cond ? `<span class="pill">${COND_NAMES[r.cond]}</span>` : ''}</div></a>`;
+}
+
 // ---------- konto ----------
 // Nyckeln krypteras på enheten med ditt lösenord (PBKDF2 + AES-GCM) och bara den krypterade versionen sparas i repot.
 // På en ny enhet hämtas den krypterade filen och låses upp med lösenordet. Lösenordet lämnar aldrig enheten.
@@ -865,7 +1063,7 @@ function renderSettings() {
 }
 
 // ---------- render ----------
-const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', statistik: 'Statistik', installningar: 'Inställningar' };
+const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', databas: 'Databas', statistik: 'Statistik', installningar: 'Inställningar' };
 function setMenu(open) {
   S.menuOpen = open; store.set('tk-menu', open);
   $('#drawer').hidden = !open;
@@ -881,9 +1079,9 @@ function render() {
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === S.tab ? 'page' : 'false'));
   document.querySelectorAll('section[data-view]').forEach(s => { s.hidden = s.dataset.view !== S.tab; if (s.hidden) s.innerHTML = ''; });
   const active = document.activeElement && document.activeElement.id;
-  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, statistik: renderStats, installningar: renderSettings })[S.tab]();
+  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, databas: renderDatabas, statistik: renderStats, installningar: renderSettings })[S.tab]();
   renderSheet();
-  if (active && !['q', 'price'].includes(active)) { const e = document.getElementById(active); if (e && e.focus) e.focus(); }
+  if (active && !['q', 'price'].includes(active)) { const e = document.getElementById(active); if (e && e.focus) { e.focus(); try { const n = e.value.length; e.setSelectionRange(n, n); } catch {} } }
 }
 
 // ---------- händelser ----------
@@ -897,7 +1095,7 @@ $('#invImport').addEventListener('change', async e => {
   try { const d = JSON.parse(await f.text()); if (!Array.isArray(d)) throw 0; S.inv = d; saveInv(); render(); toast(`Läste in ${d.length} saker.`); } catch { toast('Det där är ingen lagerkopia.'); }
 });
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],[data-retry],[data-premove],#logout,#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
+  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],[data-retry],[data-premove],[data-dbsel],[data-dbform],[data-dbrun],[data-dbdel],[data-dbmore],#logout,#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
   if (!t) return;
   if (t.dataset.retry) {
     const f = S.fynd.find(x => x.id === t.dataset.retry); if (!f) return;
@@ -916,6 +1114,18 @@ document.addEventListener('click', async e => {
   if (t.dataset.photo === 'pick') { $('#photoPick').click(); return; }
   if (t.dataset.photo === 'clear') { S.photos = []; render(); return; }
   if (t.dataset.premove != null) { S.photos.splice(+t.dataset.premove, 1); render(); return; }
+  if (t.dataset.dbsel) { store.set('tk-dbsel', t.dataset.dbsel); S.dbLimit = 60; loadDb(t.dataset.dbsel); return; }
+  if (t.dataset.dbform) { S.dbShowForm = !S.dbShowForm; render(); return; }
+  if (t.dataset.dbmore) { S.dbLimit += 60; render(); return; }
+  if (t.dataset.dbrun) { try { await dispatchDb(t.dataset.dbrun); toast('Djupscrapen har startat på GitHub. Den tar några minuter.'); } catch (err) { toast('Kunde inte starta: ' + err.message); } return; }
+  if (t.dataset.dbdel) {
+    const id = t.dataset.dbdel, k = 'w:' + id;
+    if (S.confirm !== k) { S.confirm = k; render(); return; }
+    S.confirm = null;
+    try { await updateRepoJson('data/bevakningar.json', arr => arr.filter(x => x.id !== id), 'Ta bort bevakning ' + id); S.watches = S.watches.filter(x => x.id !== id); if (S.dbSel === id) { S.dbSel = S.watches[0] ? S.watches[0].id : null; S.db = null; if (S.dbSel) loadDb(S.dbSel); } render(); toast('Bevakningen är borttagen.'); }
+    catch (err) { toast('Kunde inte ta bort: ' + err.message); }
+    return;
+  }
   if (t.id === 'logout') { tokenStore.set('', false); gh.token = ''; S.run = null; render(); toast('Utloggad från den här enheten.'); return; }
   if (t.dataset.buy != null) {
     const name = t.dataset.buy, price = t.dataset.buyprice ? S.fyndPrice[t.dataset.buyprice] : S.price;
@@ -947,9 +1157,11 @@ document.addEventListener('click', async e => {
   }
   if (t.id === 'invImportBtn') { $('#invImport').click(); }
 });
+document.addEventListener('toggle', e => { if (e.target.dataset && e.target.dataset.dbfilters) S.dbFiltersOpen = e.target.open; }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.open) { S.open = null; renderSheet(); } });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.dbf && el.tagName === 'SELECT') { S.dbFilter[el.dataset.dbf] = el.value; S.dbLimit = 60; render(); return; }
   if (el.id === 'sort') { S.sort = el.value; store.set('tk-sort', S.sort); render(); return; }
   const item = el.closest('[data-inv]');
   if (item && el.dataset.f) {
@@ -963,6 +1175,7 @@ let sTimer;
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'sheetPrice') { S.price = el.value === '' ? null : +el.value; $('#price').value = el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { render(); const sp = $('#sheetPrice'); if (sp) sp.focus(); }, 300); }
+  if (el.dataset.dbf && el.tagName === 'INPUT') { const k = el.dataset.dbf; S.dbFilter[k] = el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { S.dbLimit = 60; render(); }, 450); }
   if (el.dataset.ptext != null) { const p = S.photos[+el.dataset.ptext]; if (p) p.text = el.value; }
   if (el.dataset.fprice) { const id = el.dataset.fprice; S.fyndPrice[id] = el.value === '' ? null : +el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { render(); const f = document.getElementById('fp-' + id); if (f) { f.focus(); } }, 400); }
 });
@@ -1016,6 +1229,23 @@ document.addEventListener('submit', async e => {
       let sha; try { sha = (await api(repoPath('/contents/' + AUTH_PATH + '?ref=' + gh.branch))).sha; } catch {}
       await putFile(AUTH_PATH, b64(JSON.stringify(blob, null, 1)), 'Spara krypterad nyckel på kontot', sha);
       S.auth = blob; render(); toast('Nyckeln är sparad på kontot. Logga in med lösenordet på andra enheter.');
+    } catch (err) { toast('Kunde inte spara: ' + err.message); }
+    return;
+  }
+  if (f.id === 'watchForm') {
+    const [param, value, catName] = ($('#w-cat').value || '||').split('|'); const [loc, locName] = ($('#w-reg').value || '|').split('|');
+    const q = $('#w-q').value.trim();
+    if (!value && !q) { toast('Välj en kategori eller skriv ett sökord.'); return; }
+    const name = $('#w-name').value.trim() || [catName ? catName.split(' › ').pop() : '', q ? '”' + q + '”' : '', locName || 'Hela Sverige'].filter(Boolean).join(' · ');
+    const id = slug(name).slice(0, 60) + '-' + Date.now().toString(36).slice(-4);
+    const w = { id, name, category: value || '', categoryParam: param || 'category', categoryName: catName || '', location: loc || '', locationName: locName || '', q,
+      priceFrom: +$('#w-min').value || null, priceTo: +$('#w-max').value || null, maxListings: Math.min(40000, Math.max(100, +$('#w-cap').value || 15000)),
+      conditions: $('#w-cond').checked, enabled: true, createdAt: new Date().toISOString() };
+    try {
+      await updateRepoJson('data/bevakningar.json', arr => (arr || []).concat([w]), 'Ny bevakning: ' + name);
+      S.watches = (S.watches || []).concat([w]); S.dbShowForm = false; S.dbSel = id; S.db = null; store.set('tk-dbsel', id);
+      await dispatchDb(id).catch(() => {});
+      render(); toast('Bevakningen är skapad och första körningen har startat.');
     } catch (err) { toast('Kunde inte spara: ' + err.message); }
     return;
   }

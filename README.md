@@ -17,6 +17,18 @@ Appen visar vad som lönar sig att plocka med sig och hur mycket du högst kan b
 | `scripts/*.ps1` | Actions eller din dator | Scrapern. Windows PowerShell 5.1, inget att installera. |
 | `.github/workflows/scrape.yml` | GitHub Actions | Kör scrapen när ett foto kommer in, när du trycker på knappen i appen, och måndag och torsdag kl 06. |
 
+### Databasen (djupscrape)
+
+Under fliken **Databas** skapar du bevakningar: en Blocket-kategori (eller underkategori), ett område och valfritt sökord och prisintervall.
+.github/workflows/databas.yml kör scripts/deep.ps1 varje natt kl 04 och när du trycker "Kör nu".
+
+- Hämtar **alla** annonser. Blocket visar max 2 500 per sökning, så stora kategorier delas upp per län och prisintervall.
+- Per annons: rubrik, pris, första pris och prishistorik, bild, antal bilder, ort, län, koordinater, märke, skick,
+  frakt, köp nu, privat/företag, publiceringstid, först sedd, senast sedd och när den försvann.
+- Statistik i appen: medianpris, säljtid, säljgrad, prissänkningar, per skick/märke/ort/län, privat mot företag,
+  frakt, antal bilder, publiceringsdag, ord i rubriken, nya och försvunna per dag, underprissatta annonser och avstånd från Spånga.
+- Databasen ligger på grenen db som en enda commit utan historik, så att repot inte växer varje natt.
+
 ### Fotoflödet
 
 1. Du tar en bild i appen och skriver valfritt vad det är.

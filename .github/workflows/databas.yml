@@ -1,0 +1,59 @@
+name: Databas
+
+# Djupscrape av hela Blocket-kategorier (bevakningar i data/bevakningar.json).
+# Databasen sparas på grenen "db" som en enda commit utan historik, så att repot inte växer för varje körning.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bevakning:
+        description: 'Id på bevakningen, eller "alla"'
+        type: string
+        default: 'alla'
+  # Varje natt kl 04 svensk tid: följer prisändringar och vilka annonser som försvinner (säljs).
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: databas
+  cancel-in-progress: false
+
+jobs:
+  databas:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hämta befintlig databas
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force dbdata | Out-Null
+          git fetch --depth=1 origin db 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            git archive --format=tar -o "$env:RUNNER_TEMP\db.tar" FETCH_HEAD
+            tar -xf "$env:RUNNER_TEMP\db.tar" -C dbdata
+            Write-Host "Befintlig databas: $((Get-ChildItem dbdata).Count) filer"
+          } else { Write-Host 'Ingen databas än, börjar från noll.' }
+          exit 0
+
+      - name: Djupscrape
+        shell: powershell
+        run: .\scripts\deep.ps1 -Watch "${{ inputs.bevakning || 'alla' }}" -DbDir dbdata
+
+      - name: Spara databasen på grenen db
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          git config user.name "thriftkollen-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          $env:GIT_INDEX_FILE = "$env:RUNNER_TEMP\db-index"
+          git add -f -- dbdata
+          $tree = git write-tree --prefix=dbdata/
+          $commit = git commit-tree $tree -m "Databas $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          Remove-Item Env:GIT_INDEX_FILE
+          git push -f origin "$($commit):refs/heads/db"

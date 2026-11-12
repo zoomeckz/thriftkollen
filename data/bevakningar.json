@@ -1,0 +1,16 @@
+[
+    {
+        "id":  "cykelstolar-stockholm",
+        "name":  "Bil- och cykelstolar · Stockholm",
+        "category":  "1.68.3911",
+        "categoryParam":  "sub_category",
+        "categoryName":  "Föräldrar och barn › Bil- och cykelstolar",
+        "location":  "0.300001",
+        "locationName":  "Stockholm",
+        "q":  "",
+        "maxListings":  15000,
+        "conditions":  true,
+        "enabled":  true,
+        "createdAt":  "2026-11-12T12:33:31.5686512Z"
+    }
+]
