@@ -1,32 +1,45 @@
 [
- {
-  "id": "cykelstolar-stockholm",
-  "name": "Bil- och cykelstolar · Stockholm",
-  "category": "1.68.3911",
-  "categoryParam": "sub_category",
-  "categoryName": "Föräldrar och barn › Bil- och cykelstolar",
-  "location": "0.300001",
-  "locationName": "Stockholm",
-  "q": "",
-  "maxListings": 15000,
-  "conditions": true,
-  "enabled": true,
-  "createdAt": "2026-11-12T12:33:31.5686512Z"
- },
- {
-  "id": "tvspel-och-spelkonsoler-stockholm-d6w0",
-  "name": "TV-spel och spelkonsoler · Stockholm",
-  "category": "1.93.3905",
-  "categoryParam": "sub_category",
-  "categoryName": "Elektronik och vitvaror › TV-spel och spelkonsoler",
-  "location": "0.300001",
-  "locationName": "Stockholm",
-  "q": "",
-  "priceFrom": null,
-  "priceTo": null,
-  "maxListings": 15000,
-  "conditions": true,
-  "enabled": true,
-  "createdAt": "2026-11-12T13:36:32.545Z"
- }
+    {
+        "id":  "hela-stockholm",
+        "name":  "Hela Blocket · Stockholm",
+        "mode":  "alla",
+        "categoryName":  "Alla kategorier",
+        "location":  "0.300001",
+        "locationName":  "Stockholm",
+        "q":  "",
+        "conditions":  true,
+        "keepGoneDays":  45,
+        "enabled":  true,
+        "createdAt":  "2026-11-12T14:09:37.3052269Z"
+    },
+    {
+        "id":  "cykelstolar-stockholm",
+        "name":  "Bil- och cykelstolar · Stockholm",
+        "category":  "1.68.3911",
+        "categoryParam":  "sub_category",
+        "categoryName":  "Föräldrar och barn › Bil- och cykelstolar",
+        "location":  "0.300001",
+        "locationName":  "Stockholm",
+        "q":  "",
+        "maxListings":  15000,
+        "conditions":  true,
+        "enabled":  true,
+        "createdAt":  "2026-11-12T12:33:31.5686512Z"
+    },
+    {
+        "id":  "tvspel-och-spelkonsoler-stockholm-d6w0",
+        "name":  "TV-spel och spelkonsoler · Stockholm",
+        "category":  "1.93.3905",
+        "categoryParam":  "sub_category",
+        "categoryName":  "Elektronik och vitvaror › TV-spel och spelkonsoler",
+        "location":  "0.300001",
+        "locationName":  "Stockholm",
+        "q":  "",
+        "priceFrom":  null,
+        "priceTo":  null,
+        "maxListings":  15000,
+        "conditions":  true,
+        "enabled":  true,
+        "createdAt":  "2026-11-12T13:36:32.545Z"
+    }
 ]

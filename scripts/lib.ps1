@@ -185,3 +185,28 @@ function Format-Summary($r) {
   $bm = if ($b) { "$($b.med) kr ($($b.n))" } else { '-' }
   return ("Tradera {0,-16} Blocket {1}" -f $tm, $bm)
 }
+
+# ---------- Snabb JSON för databasen (JavaScriptSerializer är ca 50x snabbare än ConvertFrom-Json) ----------
+Add-Type -AssemblyName System.Web.Extensions
+$script:Ser = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+$script:Ser.MaxJsonLength = [int]::MaxValue
+# PowerShell lindar in värden från pipelines i PSObject, som serialiseraren inte klarar. Packa upp dem.
+function ConvertTo-Plain($o) {
+  if ($null -eq $o) { return $null }
+  if ($o -is [System.Management.Automation.PSObject]) { $o = $o.PSObject.BaseObject }
+  if ($o -is [string] -or $o -is [ValueType]) { return $o }
+  if ($o -is [System.Collections.IDictionary]) { $h = [ordered]@{}; foreach ($k in @($o.Keys)) { $h[[string]$k] = ConvertTo-Plain $o[$k] }; return $h }
+  if ($o -is [System.Collections.IEnumerable]) { $l = [System.Collections.Generic.List[object]]::new(); foreach ($x in $o) { $l.Add((ConvertTo-Plain $x)) }; return , $l.ToArray() }
+  if ($o -is [System.Management.Automation.PSCustomObject] -or $o.GetType().Name -eq 'PSCustomObject') { $h = [ordered]@{}; foreach ($p in $o.PSObject.Properties) { $h[$p.Name] = ConvertTo-Plain $p.Value }; return $h }
+  return $o
+}
+function Read-Db([string]$path) {
+  if (-not (Test-Path $path)) { return $null }
+  return $script:Ser.DeserializeObject([IO.File]::ReadAllText($path, $script:Utf8))
+}
+function Write-Db([string]$path, $obj, [switch]$Fast) {
+  $dir = Split-Path -Parent $path
+  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
+  $plain = if ($Fast) { $obj } else { ConvertTo-Plain $obj }
+  [IO.File]::WriteAllText($path, $script:Ser.Serialize($plain), $script:Utf8)
+}

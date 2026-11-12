@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1115">
+<title>Thriftkollen Marknaden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+/* Stora statistiken: byggd för datorskärm, fungerar på mobil. Alltid mörkt tema, samma färger som appen.
+   Diagramfärger: blå (serie 1) och orange (serie 2), blå skala för mängd, rött/grönt bara för nya/försvunna. */
+:root {
+  --bg: #0E1115; --surface: #161A20; --surface-2: #1E242C; --ink: #E8ECF1; --muted: #98A2AF; --line: #2A313B; --grid: #232A33;
+  --accent: #7EA0FF; --tag: #F2C52E; --tag-ink: #221A00;
+  --s1: #3987e5; --s2: #d95926; --good: #0ca30c; --bad: #e66767;
+  --q0: #0d366b; --q1: #104281; --q2: #1c5cab; --q3: #2a78d6; --q4: #3987e5; --q5: #6da7ec; --q6: #9ec5f4; --q7: #cde2fb;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 14px; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+a { color: var(--accent); }
+button, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1480px; margin: 0 auto; padding-inline: max(16px, env(safe-area-inset-left, 0px)); }
+.num, .table td.r { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .small { font-size: .82rem; }
+
+header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.head { display: flex; align-items: center; gap: 16px; min-height: 60px; flex-wrap: wrap; padding-block: 8px; }
+.logo { margin: 0; font-family: var(--font-display); font-weight: 800; font-stretch: 80%; font-size: 1.35rem; text-transform: uppercase; line-height: 1; text-decoration: none; color: var(--ink); }
+.logo span { background: var(--tag); color: var(--tag-ink); padding: 0 .25em; margin-left: .08em; }
+.head h1 { margin: 0; font-family: var(--font-display); font-stretch: 85%; font-weight: 800; font-size: 1.25rem; }
+.head .sub { color: var(--muted); font-size: .85rem; }
+.head .grow { flex: 1 1 auto; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; cursor: pointer; text-decoration: none; color: var(--ink); font-size: .88rem; }
+.btn:hover { border-color: var(--muted); }
+
+/* Filterraden: ett ställe som styr alla diagram */
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; padding-block: 18px 6px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label, .lbl { font-size: .7rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+select { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 200px; max-width: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: .85rem; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.crumbs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-weight: 600; padding-top: 4px; }
+.crumbs button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-weight: 600; }
+
+/* Rutnät */
+.dash { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; padding-block: 14px 60px; }
+.card { grid-column: span 12; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 18px 16px; display: grid; gap: 12px; align-content: start; min-width: 0; position: relative; }
+.card h2 { margin: 0; font-family: var(--font-display); font-stretch: 88%; font-weight: 750; font-size: 1.08rem; }
+.card .hint { color: var(--muted); font-size: .8rem; }
+.card-head { display: flex; justify-content: space-between; align-items: start; gap: 8px 16px; flex-wrap: wrap; }
+@media (min-width: 900px) {
+  .s4 { grid-column: span 6; } .s5 { grid-column: span 6; } .s6 { grid-column: span 6; } .s7 { grid-column: span 6; } .s8 { grid-column: span 12; }
+}
+@media (min-width: 1180px) {
+  .s4 { grid-column: span 4; } .s5 { grid-column: span 5; } .s6 { grid-column: span 6; } .s7 { grid-column: span 7; } .s8 { grid-column: span 8; }
+}
+.anim { animation: rise .55s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* Nyckeltal */
+.kpis { grid-column: span 12; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+@media (min-width: 1000px) { .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 2px; min-width: 0; }
+.kpi b { font-family: var(--font-display); font-weight: 800; font-stretch: 82%; font-size: 2rem; line-height: 1.05; white-space: nowrap; }
+.kpi span { color: var(--muted); font-size: .78rem; }
+.kpi .lbl { color: var(--muted); }
+.kpi.hero { background: linear-gradient(135deg, color-mix(in srgb, var(--s1) 22%, var(--surface)), var(--surface) 70%); }
+.delta-up { color: #4CC583; } .delta-down { color: var(--bad); }
+
+/* Trädkarta */
+.tree { position: relative; height: 430px; border-radius: 10px; overflow: hidden; background: var(--bg); }
+.tile { position: absolute; padding: 8px 10px; overflow: hidden; cursor: pointer; border: 2px solid var(--surface); border-radius: 6px;
+  transition: left .6s cubic-bezier(.2,.7,.2,1), top .6s cubic-bezier(.2,.7,.2,1), width .6s cubic-bezier(.2,.7,.2,1), height .6s cubic-bezier(.2,.7,.2,1), background-color .5s, opacity .4s, filter .2s;
+  display: flex; flex-direction: column; gap: 1px; color: #fff; }
+.tile:hover { filter: brightness(1.18); z-index: 2; }
+.tile.dark-ink { color: #0b0b0b; }
+.tile b { font-weight: 700; font-size: .86rem; line-height: 1.15; }
+.tile span { font-size: .75rem; opacity: .85; }
+.tile.enter { opacity: 0; }
+.legend-ramp { display: flex; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
+.legend-ramp i { display: block; width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--q1), var(--q3), var(--q5), var(--q7)); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+/* Topplistor */
+.rank { display: grid; gap: 6px; counter-reset: r; }
+.rank-row { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; cursor: pointer; padding: 6px 8px; border-radius: 8px; border: 0; background: none; text-align: left; }
+.rank-row:hover { background: var(--surface-2); }
+.rank-row::before { counter-increment: r; content: counter(r); color: var(--muted); font-size: .8rem; font-weight: 700; text-align: right; }
+.rank-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
+.rank-row .nm small { display: block; color: var(--muted); font-weight: 500; font-size: .74rem; }
+.rank-row .v { font-weight: 700; font-variant-numeric: tabular-nums; font-size: .9rem; }
+.rank-row .track { grid-column: 2 / 4; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.rank-row .track div { height: 100%; border-radius: 2px; background: var(--s1); transform-origin: left; animation: grow .8s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes grow { from { transform: scaleX(0); } }
+
+/* Diagram */
+.chart-box { position: relative; height: 300px; }
+.chart-box.tall { height: 360px; }
+.empty-chart { display: grid; place-items: center; text-align: center; height: 100%; color: var(--muted); font-size: .9rem; padding: 20px; border: 1px dashed var(--line); border-radius: 10px; }
+
+/* Heatmap */
+.heat { display: grid; grid-template-columns: 2.4rem repeat(24, minmax(0, 1fr)); gap: 2px; font-size: .68rem; color: var(--muted); }
+.heat .c { aspect-ratio: 1; border-radius: 3px; animation: pop .5s ease both; animation-delay: calc(var(--x) * 18ms + var(--y) * 30ms); }
+.heat .c:hover { outline: 2px solid var(--ink); }
+.heat .rl { align-self: center; }
+.heat .hl { text-align: center; }
+@keyframes pop { from { opacity: 0; transform: scale(.4); } }
+
+/* Karta */
+.map-wrap { position: relative; }
+canvas.map { width: 100%; display: block; border-radius: 10px; background: var(--bg); cursor: crosshair; }
+
+/* Fördelningar */
+.meters { display: grid; gap: 14px; }
+.meter { display: grid; gap: 6px; }
+.meter .top { display: flex; justify-content: space-between; font-size: .88rem; }
+.meter .top b { font-variant-numeric: tabular-nums; }
+.meter .track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.meter .track div { height: 100%; background: var(--s1); border-radius: 4px; transform-origin: left; animation: grow 1s cubic-bezier(.2,.7,.2,1) both; }
+
+/* Fynd */
+.deals { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+.deal { display: grid; gap: 4px; text-decoration: none; color: var(--ink); font-size: .82rem; min-width: 0; }
+.deal .im { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.deal img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s; }
+.deal:hover img { transform: scale(1.06); }
+.deal .off { position: absolute; left: 8px; top: 8px; background: var(--tag); color: var(--tag-ink); font-weight: 800; padding: 2px 7px; border-radius: 6px; font-size: .78rem; }
+.deal .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deal .p { display: flex; justify-content: space-between; gap: 6px; font-weight: 700; }
+.deal .m { color: var(--muted); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Tabell */
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.table th, .table td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--surface); }
+.table th.r, .table td.r { text-align: right; }
+.table th[aria-sort]::after { content: " ↓"; } .table th[aria-sort="ascending"]::after { content: " ↑"; }
+.table tbody tr { cursor: pointer; } .table tbody tr:hover td { background: var(--surface-2); }
+.table tr.sel td { background: color-mix(in srgb, var(--s1) 16%, transparent); }
+.spark { display: block; }
+
+/* Verktygstips för egna diagram */
+#tip { position: fixed; z-index: 50; pointer-events: none; background: #0b0d10; border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; border-radius: 8px; font-size: .8rem; box-shadow: 0 10px 30px rgb(0 0 0 / .45); max-width: 280px; opacity: 0; transition: opacity .12s; }
+#tip b { display: block; margin-bottom: 2px; }
+.loading { display: grid; place-items: center; gap: 12px; min-height: 60vh; color: var(--muted); text-align: center; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.note { padding: 12px 14px; border-radius: 10px; background: var(--surface-2); font-size: .88rem; grid-column: span 12; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 640px) { .tree { height: 340px; } .kpi b { font-size: 1.6rem; } select { min-width: 0; width: 100%; } .filters .field { flex: 1 1 100%; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap head">
+    <a class="logo" href="./">Thrift<span>kollen</span></a>
+    <div class="grow"><h1 id="title">Marknaden</h1><div class="sub" id="subtitle">Laddar…</div></div>
+    <a class="btn" href="./#databas">← Appen</a>
+  </div>
+</header>
+<main class="wrap">
+  <div id="app" class="loading"><div class="spinner"></div><div>Hämtar databasen…</div></div>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+'use strict';
+// ---------- grund ----------
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = new Intl.NumberFormat('sv-SE');
+const fmt = n => n == null || !isFinite(n) ? '–' : nf.format(Math.round(n));
+const kr = n => n == null || !isFinite(n) ? '–' : nf.format(Math.round(n)) + ' kr';
+const short = n => n == null ? '–' : n >= 1e9 ? (n / 1e9).toFixed(1).replace('.', ',') + ' mdr' : n >= 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' mn' : n >= 1e4 ? Math.round(n / 1e3) + ' k' : nf.format(Math.round(n));
+const pct = (a, b) => b ? Math.round(a / b * 100) + ' %' : '–';
+const dayDate = d => new Date(d * 86400000);
+const dFmt = new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' });
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const RAMP = ['--q1', '--q2', '--q3', '--q4', '--q5', '--q6', '--q7'].map(v => getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+const DARK_INK_FROM = 5;   // steg 5 och ljusare får mörk text
+const WEEK = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
+const HOME = { lat: 59.39, lon: 17.905, name: 'Spånga' };
+const PLACES = [{ n: 'Stockholm C', lat: 59.33, lon: 18.07 }, { n: 'Södertälje', lat: 59.196, lon: 17.626 }, { n: 'Norrtälje', lat: 59.758, lon: 18.705 },
+  { n: 'Nynäshamn', lat: 58.903, lon: 17.947 }, { n: 'Märsta', lat: 59.62, lon: 17.855 }, { n: 'Värmdö', lat: 59.31, lon: 18.53 }];
+
+// Var databasen ligger: grenen "db" i repot (GitHub Pages) eller ./dbdata/ vid lokal förhandsvisning.
+const onPages = location.hostname.endsWith('github.io');
+const OWNER = onPages ? location.hostname.split('.')[0] : null;
+const REPO = onPages ? (location.pathname.split('/').filter(Boolean)[0] || OWNER + '.github.io') : null;
+const DB = onPages ? `https://raw.githubusercontent.com/${OWNER}/${REPO}/db/` : './dbdata/';
+async function getJson(path) {
+  const r = await fetch(DB + path + (onPages ? '?t=' + Math.floor(Date.now() / 60000) : ''), { cache: 'no-store' });
+  if (!r.ok) throw Object.assign(new Error(r.status + ' ' + path), { status: r.status });
+  return r.json();
+}
+
+const S = { ov: null, trend: null, cat: '', sub: '', period: 30, color: 'speed', rank: 'fast', sort: { k: 'active', dir: -1 }, charts: {} };
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  S.cat = h.get('kat') || ''; S.sub = h.get('sub') || ''; S.period = +(h.get('dagar') || 30);
+}
+function writeHash() {
+  const h = new URLSearchParams(); if (S.cat) h.set('kat', S.cat); if (S.sub) h.set('sub', S.sub); if (S.period !== 30) h.set('dagar', S.period);
+  history.replaceState(null, '', '#' + h.toString());
+}
+
+// ---------- verktygstips ----------
+const tip = $('#tip');
+function showTip(e, html) { tip.innerHTML = html; tip.style.opacity = 1; const x = Math.min(innerWidth - tip.offsetWidth - 12, e.clientX + 14), y = Math.min(innerHeight - tip.offsetHeight - 12, e.clientY + 14); tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.style.opacity = 0; }
+
+// ---------- data: urval och sammanslagning ----------
+const subsIn = () => S.ov.subs.filter(s => S.sub ? s.sub === S.sub : S.cat ? s.cat === S.cat : true);
+const catName = v => (S.ov.cats.find(c => c.value === v) || {}).name || v;
+const subOf = v => S.ov.subs.find(s => s.sub === v);
+function wmedian(pairs) {   // viktad median av [värde, vikt]
+  const a = pairs.filter(p => p[0] != null && p[1] > 0).sort((x, y) => x[0] - y[0]); const tot = a.reduce((s, p) => s + p[1], 0); let acc = 0;
+  for (const p of a) { acc += p[1]; if (acc >= tot / 2) return p[0]; } return null;
+}
+function agg(list) {
+  const z = n => new Array(n).fill(0);
+  const a = { n: list.length, active: 0, new: 0, gone: 0, gone30: 0, value: 0, priced: 0, ship: 0, company: 0, buyNow: 0, freeShip: 0, drops: 0, within7: 0, sellN: 0,
+    hist: z(S.ov.histBands.length), cond: z(6), wdhr: z(168), pubDays: z(60) };
+  for (const s of list) {
+    for (const k of ['active', 'new', 'gone', 'gone30', 'value', 'priced', 'ship', 'company', 'buyNow', 'freeShip', 'drops']) a[k] += s[k] || 0;
+    a.within7 += s.sell.within7 || 0; a.sellN += s.sell.n || 0;
+    s.hist.forEach((v, i) => a.hist[i] += v); s.cond.forEach((v, i) => a.cond[i] += v); s.wdhr.forEach((v, i) => a.wdhr[i] += v); s.pubDays.forEach((v, i) => a.pubDays[i] += v);
+  }
+  const one = list.length === 1 ? list[0] : null;
+  a.p50 = one ? one.p[2] : wmedian(list.map(s => [s.p[2], s.priced]));
+  a.p25 = one ? one.p[1] : wmedian(list.map(s => [s.p[1], s.priced]));
+  a.p75 = one ? one.p[3] : wmedian(list.map(s => [s.p[3], s.priced]));
+  a.sell50 = one ? one.sell.d50 : wmedian(list.map(s => [s.sell.d50, s.sell.n]));
+  a.approx = !one;
+  a.rate = a.gone30 ? a.gone30 / (a.active + a.gone30) : null;                          // säljgrad senaste 30 dagarna
+  a.inflow = a.active ? a.pubDays.slice(-7).reduce((x, y) => x + y, 0) / a.active : null;  // nya senaste veckan per aktiv annons
+  return a;
+}
+const hasGone = () => S.ov.subs.some(s => s.gone30 > 0);
+// "Fart": säljgrad när vi har försvunna annonser, annars inflöde av nya annonser.
+const speedOf = s => hasGone() ? (s.gone30 ? s.gone30 / (s.active + s.gone30) : 0) : (s.active ? s.pubDays.slice(-7).reduce((x, y) => x + y, 0) / s.active : 0);
+const speedLabel = () => hasGone() ? 'Säljgrad 30 d' : 'Nya senaste veckan / aktiva';
+const speedFmt = v => v == null ? '–' : Math.round(v * 100) + ' %';
+
+// Trendserier för urvalet: summera underkategoriernas dagrader.
+function trendFor(list) {
+  const T = S.trend; if (!T) return [];
+  const m = new Map();
+  for (const s of list) for (const r of (T.subs[s.sub] || [])) {
+    const d = r[0]; if (!m.has(d)) m.set(d, { day: d, active: 0, new: 0, gone: 0, value: 0, drops: 0 });
+    const o = m.get(d); o.active += r[1] || 0; o.new += r[2] || 0; o.gone += r[3] || 0; o.drops += r[6] || 0; o.value += r[7] || 0;
+  }
+  const rows = [...m.values()].sort((a, b) => a.day - b.day);
+  return S.period ? rows.filter(r => r.day > S.ov.day - S.period) : rows;
+}
+
+// ---------- räknare och färger ----------
+function countUp(el, to, f = fmt) {
+  if (REDUCED || to == null || !isFinite(to)) { el.textContent = f(to); return; }
+  const t0 = performance.now(), dur = 900;
+  const step = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = f(to * e); if (k < 1) requestAnimationFrame(step); else el.textContent = f(to); };
+  requestAnimationFrame(step);
+}
+function rampIndex(v, sorted) {  // kvantilplats -> färgsteg
+  if (v == null || !sorted.length) return 0;
+  let lo = 0; while (lo < sorted.length && sorted[lo] < v) lo++;
+  return Math.min(RAMP.length - 1, Math.floor(lo / sorted.length * RAMP.length));
+}
+
+// ---------- uppbyggnad ----------
+async function boot() {
+  readHash();
+  let idx;
+  try { idx = await getJson('index.json'); } catch (e) { return fail('Kunde inte läsa databasen (' + esc(e.message) + ').'); }
+  const big = (idx.watches || []).filter(w => w.mode === 'alla');
+  if (!big.length) return fail(`Det finns ingen Hela Blocket-bevakning än. Skapa en i appen under <a href="./#databas">Databas</a> → + Ny bevakning → ★ Hela Blocket. Första körningen tar ungefär 20 minuter.`);
+  const want = new URLSearchParams(location.search).get('w');
+  const w = big.find(x => x.id === want) || big[0];
+  try { [S.ov, S.trend] = await Promise.all([getJson(`${w.id}/overview.json`), getJson(`${w.id}/trend.json`).catch(() => null)]); }
+  catch (e) { return fail(e.status === 404 ? 'Första körningen av hela Blocket är inte klar än. Kom tillbaka om en stund.' : 'Kunde inte läsa översikten: ' + esc(e.message)); }
+  S.watches = big;
+  if (S.sub && !subOf(S.sub)) S.sub = ''; if (S.sub) S.cat = subOf(S.sub).cat;
+  $('#title').textContent = S.ov.name;
+  const days = S.trend ? S.trend.total.length : 1;
+  $('#subtitle').textContent = `${fmt(S.ov.totals.active)} annonser i ${S.ov.totals.subs} underkategorier · uppdaterad ${new Date(S.ov.updatedAt).toLocaleString('sv-SE', { dateStyle: 'medium', timeStyle: 'short' })} · ${days} ${days === 1 ? 'dag' : 'dagar'} historik`;
+  render(true);
+}
+function fail(html) { $('#app').className = 'loading'; $('#app').innerHTML = `<div style="max-width:520px">${html}</div>`; $('#subtitle').textContent = ''; }
+
+function render(first) {
+  writeHash();
+  Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
+  const list = subsIn(), A = agg(list), ov = S.ov;
+  const scopeName = S.sub ? subOf(S.sub).name : S.cat ? catName(S.cat) : 'Alla kategorier';
+  const cats = ov.cats.filter(c => ov.subs.some(s => s.cat === c.value));
+  const tr = trendFor(list), trendDays = tr.length;
+  const app = $('#app'); app.className = 'dash';
+  let i = 0; const I = () => `style="--i:${i++}"`;
+  app.innerHTML = `
+  <div class="filters" style="grid-column:span 12">
+    <div class="field"><label for="f-cat">Kategori</label><select id="f-cat"><option value="">Alla kategorier</option>${cats.map(c => `<option value="${c.value}" ${c.value === S.cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-sub">Underkategori</label><select id="f-sub" ${S.cat ? '' : 'disabled'}><option value="">${S.cat ? 'Alla i ' + esc(catName(S.cat)) : 'Välj kategori först'}</option>${S.cat ? ov.subs.filter(s => s.cat === S.cat).map(s => `<option value="${s.sub}" ${s.sub === S.sub ? 'selected' : ''}>${esc(s.name)} (${fmt(s.active)})</option>`).join('') : ''}</select></div>
+    <div class="field"><span class="lbl">Trendperiod</span><div class="seg" role="group" aria-label="Trendperiod">${[[7, '7 d'], [30, '30 d'], [90, '90 d'], [0, 'Allt']].map(([v, l]) => `<button data-period="${v}" aria-pressed="${S.period === v}">${l}</button>`).join('')}</div></div>
+    ${S.watches.length > 1 ? `<div class="field"><label for="f-w">Område</label><select id="f-w">${S.watches.map(w => `<option value="${esc(w.id)}" ${w.id === ov.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>` : ''}
+    <div class="crumbs small" style="flex-basis:100%"><button data-go="">Alla kategorier</button>${S.cat ? ` › <button data-go="${S.cat}">${esc(catName(S.cat))}</button>` : ''}${S.sub ? ` › <span>${esc(subOf(S.sub).name)}</span>` : ''}</div>
+  </div>
+
+  ${!hasGone() ? `<div class="note anim" ${I()}>Databasen är ny. Säljtid, säljgrad och trender fylls på varje natt när annonser försvinner (säljs). Tills dess visar färgerna <b>inflöde</b>: hur många nya annonser som kommit senaste veckan i förhållande till utbudet.</div>` : ''}
+
+  <div class="kpis">
+    <div class="kpi hero anim" ${I()}><span class="lbl">Aktiva annonser</span><b data-count="${A.active}"></b><span>${esc(scopeName)}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Totalt värde</span><b data-count="${A.value}" data-f="short"></b><span>kr i utbjudna priser</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">${trendDays > 1 ? 'Nya senaste dygnet' : 'Publicerade i går'}</span><b data-count="${trendDays > 1 ? A.new : A.pubDays[58]}"></b><span>${pct(A.pubDays.slice(-7).reduce((x, y) => x + y, 0), A.active)} av utbudet är från senaste veckan</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Försvann senaste dygnet</span><b data-count="${A.gone}"></b><span>${A.gone30 ? fmt(A.gone30) + ' på 30 dagar' : 'räknas från andra natten'}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Säljtid, median</span><b>${A.sell50 != null ? (A.approx ? 'ca ' : '') + A.sell50 + ' d' : '–'}</b><span>${A.sellN ? pct(A.within7, A.sellN) + ' borta inom en vecka' : 'från publicering till försvunnen'}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Medianpris</span><b data-count="${A.p50 ?? ''}" data-f="kr"></b><span>${A.approx ? 'ungefär, ' : ''}hälften mellan ${kr(A.p25)} och ${kr(A.p75)}</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Kan skickas</span><b>${pct(A.ship, A.active)}</b><span>${pct(A.company, A.active)} är företag</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Har sänkt priset</span><b>${pct(A.drops, A.active)}</b><span>${fmt(A.drops)} annonser</span></div>
+  </div>
+
+  <section class="card s8 anim" ${I()}>
+    <div class="card-head"><div><h2>Var finns utbudet?</h2><div class="hint">Ytan är antalet aktiva annonser. Klicka för att gå ner en nivå.</div></div>
+      <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg" role="group" aria-label="Färg efter">${[['speed', hasGone() ? 'Säljgrad' : 'Inflöde'], ['price', 'Medianpris'], ['drops', 'Prissänkta']].map(([v, l]) => `<button data-color="${v}" aria-pressed="${S.color === v}">${l}</button>`).join('')}</div>
+      <div class="legend-ramp"><span>Låg</span><i></i><span>Hög</span></div></div></div>
+    <div class="tree" id="tree" role="list"></div>
+  </section>
+
+  <section class="card s4 anim" ${I()}>
+    <div class="card-head"><h2>Topplistor</h2></div>
+    <div class="seg" role="group" aria-label="Topplista" style="flex-wrap:wrap">${[['fast', hasGone() ? 'Säljer snabbast' : 'Mest inflöde'], ['new', 'Flest nya'], ['dear', 'Dyrast'], ['drop', 'Prissänkta']].map(([v, l]) => `<button data-rank="${v}" aria-pressed="${S.rank === v}">${l}</button>`).join('')}</div>
+    <div class="rank" id="rank"></div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Aktiva annonser över tid</h2><div class="hint">${esc(scopeName)} · en punkt per natt</div></div></div>
+    <div class="chart-box">${trendDays > 1 ? '<canvas id="c-active"></canvas>' : `<div class="empty-chart">Trenden ritas från andra natten. Just nu finns ${trendDays} mätpunkt.</div>`}</div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>${trendDays > 1 ? 'Nya och försvunna per dag' : 'Publiceringar per dag'}</h2><div class="hint">${trendDays > 1 ? 'Grönt = nya annonser, rött = försvunna (sålda eller borttagna)' : 'Annonser som ligger ute nu, efter publiceringsdag. Äldre annonser har hunnit säljas, så kurvan lutar uppåt mot i dag.'}</div></div>
+      ${trendDays > 1 ? `<div class="legend"><span><i style="background:#4CC583"></i>Nya</span><span><i style="background:var(--bad)"></i>Försvunna</span></div>` : ''}</div>
+    <div class="chart-box"><canvas id="c-flow"></canvas></div>
+  </section>
+
+  <section class="card s7 anim" ${I()}>
+    <div class="card-head"><div><h2>Pris mot fart</h2><div class="hint">Varje bubbla är en underkategori. Höger = dyrare, upp = ${hasGone() ? 'säljs snabbare' : 'fler nya annonser'}, storlek = utbud. ${S.cat ? 'Blå = vald kategori.' : ''} Klicka på en bubbla.</div></div></div>
+    <div class="chart-box tall"><canvas id="c-bubble"></canvas></div>
+  </section>
+
+  <section class="card s5 anim" ${I()}>
+    <div class="card-head"><div><h2>När läggs annonserna upp?</h2><div class="hint">Veckodag och timme, svensk tid. Mörkt = få, ljust = många.</div></div></div>
+    <div class="heat" id="heat"></div>
+    <div class="hint" id="heat-best"></div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Prisfördelning</h2><div class="hint">Aktiva annonser per prisintervall</div></div></div>
+    <div class="chart-box"><canvas id="c-hist"></canvas></div>
+  </section>
+
+  <section class="card s6 anim" ${I()}>
+    <div class="card-head"><div><h2>Var ligger annonserna?</h2><div class="hint">Täthet per ruta (ca 2,8 × 2,6 km). Gul prick = ${HOME.name}.</div></div></div>
+    <div class="map-wrap"><canvas class="map" id="map" height="460"></canvas></div>
+  </section>
+
+  <section class="card s4 anim" ${I()}>
+    <div class="card-head"><div><h2>Skick</h2><div class="hint">Säljarens egen bedömning</div></div></div>
+    <div class="chart-box" style="height:250px"><canvas id="c-cond"></canvas></div>
+  </section>
+
+  <section class="card s4 anim" ${I()}>
+    <div class="card-head"><h2>Hur säljs det?</h2></div>
+    <div class="meters">${[['Kan skickas', A.ship], ['Gratis frakt', A.freeShip], ['Köp nu', A.buyNow], ['Företag', A.company], ['Har sänkt priset', A.drops]].map(([l, v]) =>
+      `<div class="meter"><div class="top"><span>${l}</span><b>${pct(v, A.active)}</b></div><div class="track"><div style="width:${A.active ? v / A.active * 100 : 0}%"></div></div></div>`).join('')}</div>
+  </section>
+
+  <section class="card s4 anim" ${I()}>
+    <div class="card-head"><div><h2>Märken</h2><div class="hint">Flest aktiva annonser${list.length > 1 ? ' (median ungefärlig)' : ''}</div></div></div>
+    <div class="rank" id="brands"></div>
+  </section>
+
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Fynd just nu</h2><div class="hint">Minst hälften under medianpriset för samma märke i samma underkategori. Pris under 50 kr räknas inte.</div></div></div>
+    <div class="deals" id="deals"></div>
+  </section>
+
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Alla underkategorier</h2><div class="hint">Klicka på en rubrik för att sortera, på en rad för att välja. Linjen visar publiceringar senaste 60 dagarna.</div></div></div>
+    <div class="table-wrap" id="table"></div>
+  </section>`;
+
+  app.querySelectorAll('[data-count]').forEach(el => { const v = el.dataset.count === '' ? null : +el.dataset.count; countUp(el, v, el.dataset.f === 'short' ? short : el.dataset.f === 'kr' ? kr : fmt); });
+  drawTree(first); drawRank(); drawTrend(tr, A); drawBubble(); drawHeat(A); drawHist(A); drawMap(list); drawCond(A); drawBrands(list); drawDeals(list); drawTable();
+}
+
+// ---------- trädkarta (squarify) ----------
+function squarify(items, x, y, w, h) {
+  const out = [], total = items.reduce((s, it) => s + it.v, 0); if (!total) return out;
+  const scale = w * h / total; let rest = items.map(it => ({ ...it, a: it.v * scale }));
+  while (rest.length) {
+    const short = Math.min(w, h); let row = [], best = Infinity;
+    for (const it of rest) {
+      const r = row.concat([it]), s = r.reduce((a, b) => a + b.a, 0), mx = Math.max(...r.map(z => z.a)), mn = Math.min(...r.map(z => z.a));
+      const worst = Math.max(short * short * mx / (s * s), (s * s) / (short * short * mn));
+      if (worst > best) break; best = worst; row = r;
+    }
+    const s = row.reduce((a, b) => a + b.a, 0), thick = s / short; let off = 0;
+    for (const it of row) { const len = it.a / thick; out.push(w >= h ? { ...it, x, y: y + off, w: thick, h: len } : { ...it, x: x + off, y, w: len, h: thick }); off += len; }
+    if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+    rest = rest.slice(row.length);
+  }
+  return out;
+}
+function drawTree(first) {
+  const el = $('#tree'), W = el.clientWidth, H = el.clientHeight;
+  const ov = S.ov, level = S.cat ? 'sub' : 'cat';
+  let items;
+  if (level === 'cat') items = ov.cats.map(c => { const l = ov.subs.filter(s => s.cat === c.value), a = agg(l); return { key: c.value, name: c.name, v: a.active, a, kids: l.length }; });
+  else items = ov.subs.filter(s => s.cat === S.cat).map(s => ({ key: s.sub, name: s.name, v: s.active, a: agg([s]), s }));
+  items = items.filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const metric = it => S.color === 'price' ? it.a.p50 : S.color === 'drops' ? (it.a.active ? it.a.drops / it.a.active : 0) : (it.s ? speedOf(it.s) : (hasGone() ? it.a.rate : it.a.inflow));
+  const vals = items.map(metric).filter(v => v != null).sort((a, b) => a - b);
+  const rects = squarify(items, 0, 0, W, H);
+  const old = new Map([...el.children].map(c => [c.dataset.key, c]));
+  el.innerHTML = '';
+  rects.forEach((r, k) => {
+    const d = document.createElement('div'), m = metric(r), ri = rampIndex(m, vals);
+    d.className = 'tile' + (ri >= DARK_INK_FROM ? ' dark-ink' : '') + (first && !REDUCED ? ' enter' : '');
+    d.dataset.key = r.key; d.setAttribute('role', 'listitem'); d.tabIndex = 0;
+    Object.assign(d.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px', backgroundColor: RAMP[ri] });
+    const big = r.w > 90 && r.h > 44;
+    const mtxt = S.color === 'price' ? kr(m) : S.color === 'drops' ? speedFmt(m) : speedFmt(m);
+    d.innerHTML = big ? `<b>${esc(r.name)}</b><span>${fmt(r.v)} st · ${mtxt}</span>` : (r.w > 40 && r.h > 22 ? `<span>${fmt(r.v)}</span>` : '');
+    const tipHtml = `<b>${esc(r.name)}</b>${fmt(r.v)} aktiva annonser<br>Medianpris ${r.a.approx ? 'ca ' : ''}${kr(r.a.p50)}<br>${speedLabel()}: ${speedFmt(r.s ? speedOf(r.s) : (hasGone() ? r.a.rate : r.a.inflow))}<br>Prissänkta: ${pct(r.a.drops, r.a.active)}${r.a.sell50 != null ? `<br>Säljtid ${r.a.sell50} d` : ''}`;
+    d.addEventListener('mousemove', e => showTip(e, tipHtml)); d.addEventListener('mouseleave', hideTip);
+    const go = () => { hideTip(); if (level === 'cat') { S.cat = r.key; S.sub = ''; } else { S.sub = r.key; } render(); };
+    d.addEventListener('click', go); d.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    el.appendChild(d);
+    if (first && !REDUCED) setTimeout(() => d.classList.remove('enter'), 60 + k * 35);
+  });
+}
+
+// ---------- topplistor ----------
+function drawRank() {
+  const el = $('#rank'), pool = S.cat ? S.ov.subs.filter(s => s.cat === S.cat) : S.ov.subs;
+  const defs = {
+    fast: hasGone() ? { v: s => s.sell.n >= 10 ? s.sell.d50 : null, asc: true, f: v => v + ' d', note: 'mediansäljtid' } : { v: s => s.active >= 50 ? speedOf(s) : null, f: speedFmt, note: 'nya senaste veckan / aktiva' },
+    new: { v: s => (S.trend && S.trend.total.length > 1) ? s.new : s.pubDays.slice(-7).reduce((a, b) => a + b, 0), f: fmt },
+    dear: { v: s => s.priced >= 20 ? s.p[2] : null, f: kr },
+    drop: { v: s => s.active >= 50 ? s.drops / s.active : null, f: speedFmt },
+  };
+  const d = defs[S.rank];
+  const rows = pool.map(s => ({ s, v: d.v(s) })).filter(x => x.v != null && isFinite(x.v)).sort((a, b) => d.asc ? a.v - b.v : b.v - a.v).slice(0, 10);
+  const mx = Math.max(...rows.map(r => r.v), 1e-9);
+  el.innerHTML = rows.length ? rows.map(r => `<button class="rank-row" data-pick="${r.s.sub}"><span class="nm">${esc(r.s.name)}<small>${esc(r.s.catName)} · ${fmt(r.s.active)} st</small></span><span class="v">${d.f(r.v)}</span>
+    <span class="track"><div style="width:${Math.max(4, (d.asc ? (rows[0].v / r.v) : r.v / mx) * 100)}%"></div></span></button>`).join('')
+    : '<p class="muted small">För lite data än.</p>';
+}
+
+// ---------- Chart.js-diagram ----------
+Chart.defaults.color = '#98A2AF';
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 12;
+Chart.defaults.borderColor = '#232A33';
+Chart.defaults.animation.duration = REDUCED ? 0 : 900;
+Chart.defaults.plugins.legend.display = false;
+Object.assign(Chart.defaults.plugins.tooltip, { backgroundColor: '#0b0d10', borderColor: '#2A313B', borderWidth: 1, padding: 10, titleColor: '#E8ECF1', bodyColor: '#E8ECF1', displayColors: true, boxPadding: 4 });
+const axis = (o = {}) => ({ grid: { color: '#232A33', drawTicks: false }, border: { color: '#383835' }, ticks: { padding: 6 }, ...o });
+
+function drawTrend(tr, A) {
+  const s1 = '#3987e5';
+  if (tr.length > 1) {
+    S.charts.active = new Chart($('#c-active'), { type: 'line', data: { labels: tr.map(r => dFmt.format(dayDate(r.day))), datasets: [{ label: 'Aktiva', data: tr.map(r => r.active), borderColor: s1, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: .3, fill: true,
+      backgroundColor: ctx => { const { chart } = ctx, g = chart.ctx.createLinearGradient(0, chart.chartArea ? chart.chartArea.top : 0, 0, chart.chartArea ? chart.chartArea.bottom : 300); g.addColorStop(0, 'rgba(57,135,229,.35)'); g.addColorStop(1, 'rgba(57,135,229,0)'); return g; } }] },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: axis({ grid: { display: false } }), y: axis({ beginAtZero: false, ticks: { callback: v => short(v) } }) }, plugins: { tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) + ' aktiva' } } } } });
+    S.charts.flow = new Chart($('#c-flow'), { type: 'bar', data: { labels: tr.map(r => dFmt.format(dayDate(r.day))), datasets: [
+      { label: 'Nya', data: tr.map(r => r.new), backgroundColor: '#4CC583', borderRadius: 4, borderSkipped: 'start', barPercentage: .8, categoryPercentage: .7 },
+      { label: 'Försvunna', data: tr.map(r => r.gone), backgroundColor: '#e66767', borderRadius: 4, borderSkipped: 'start', barPercentage: .8, categoryPercentage: .7 }] },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: axis({ grid: { display: false } }), y: axis({ beginAtZero: true, ticks: { callback: v => short(v) } }) } } });
+  } else {
+    const labels = A.pubDays.map((_, i) => dFmt.format(dayDate(S.ov.day - 59 + i)));
+    S.charts.flow = new Chart($('#c-flow'), { type: 'bar', data: { labels, datasets: [{ label: 'Publicerade', data: A.pubDays, backgroundColor: s1, borderRadius: 3, borderSkipped: 'start', barPercentage: .85, categoryPercentage: .9 }] },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: axis({ grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } }), y: axis({ beginAtZero: true, ticks: { callback: v => short(v) } }) },
+        plugins: { tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) + ' annonser publicerade' } } } } });
+  }
+}
+function drawBubble() {
+  const subs = S.ov.subs.filter(s => s.active > 0 && s.p[2] > 0);
+  const maxA = Math.max(...subs.map(s => s.active));
+  const sel = s => S.sub ? s.sub === S.sub : S.cat ? s.cat === S.cat : true;
+  const pts = subs.map(s => ({ x: s.p[2], y: Math.round(speedOf(s) * 1000) / 10, r: 4 + Math.sqrt(s.active / maxA) * 26, s }));
+  S.charts.bubble = new Chart($('#c-bubble'), { type: 'bubble', data: { datasets: [{ data: pts,
+      backgroundColor: pts.map(p => sel(p.s) ? 'rgba(57,135,229,.72)' : 'rgba(152,162,175,.22)'), borderColor: pts.map(p => sel(p.s) ? '#9ec5f4' : 'rgba(152,162,175,.4)'), borderWidth: 1.5, hoverBorderWidth: 2, hoverBorderColor: '#E8ECF1' }] },
+    options: { maintainAspectRatio: false,
+      scales: { x: axis({ type: 'logarithmic', title: { display: true, text: 'Medianpris (kr, logaritmisk skala)' }, ticks: { callback: v => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000].includes(v) ? short(v) : '' } }),
+        y: axis({ beginAtZero: true, title: { display: true, text: speedLabel() + ' (%)' } }) },
+      onClick: (e, els) => { if (els.length) { const s = pts[els[0].index].s; S.cat = s.cat; S.sub = s.sub; render(); } },
+      onHover: (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      plugins: { tooltip: { displayColors: false, callbacks: { title: c => c[0].raw.s.name, label: c => [`${c.raw.s.catName}`, `${fmt(c.raw.s.active)} aktiva`, `Medianpris ${kr(c.raw.x)}`, `${speedLabel()}: ${c.raw.y} %`] } } } } });
+}
+function drawHist(A) {
+  const b = S.ov.histBands, labels = b.map((lo, i) => i < b.length - 1 ? `${short(lo)}–${short(b[i + 1] - 1)}` : `${short(lo)}+`);
+  S.charts.hist = new Chart($('#c-hist'), { type: 'bar', data: { labels, datasets: [{ label: 'Annonser', data: A.hist, backgroundColor: '#3987e5', borderRadius: 4, borderSkipped: 'start', barPercentage: .9, categoryPercentage: .92 }] },
+    options: { maintainAspectRatio: false, scales: { x: axis({ grid: { display: false }, title: { display: true, text: 'kr' } }), y: axis({ beginAtZero: true, ticks: { callback: v => short(v) } }) },
+      plugins: { tooltip: { callbacks: { title: c => c[0].label + ' kr', label: c => ` ${fmt(c.raw)} annonser (${pct(c.raw, A.priced)})` } } } } });
+}
+function drawCond(A) {
+  const names = S.ov.condNames, order = [1, 2, 3, 4, 5, 0];
+  const ramp = ['#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#52514e'];   // ordnad skala, ljusast = nytt
+  S.charts.cond = new Chart($('#c-cond'), { type: 'bar', data: { labels: order.map(i => i ? names[i] : 'Ej angivet'), datasets: [{ data: order.map(i => A.cond[i]), backgroundColor: ramp, borderRadius: 4, borderSkipped: 'start', barPercentage: .8 }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, scales: { x: axis({ beginAtZero: true, ticks: { callback: v => short(v) } }), y: axis({ grid: { display: false } }) },
+      plugins: { tooltip: { displayColors: false, callbacks: { label: c => ` ${fmt(c.raw)} (${pct(c.raw, A.active)})` } } } } });
+}
+
+// ---------- heatmap ----------
+function drawHeat(A) {
+  const el = $('#heat'); const vals = [...A.wdhr].sort((a, b) => a - b); const sorted = vals.filter(v => v > 0);
+  let h = '<span></span>' + Array.from({ length: 24 }, (_, i) => `<span class="hl">${i % 3 === 0 ? String(i).padStart(2, '0') : ''}</span>`).join('');
+  let best = { v: -1 };
+  for (let r = 0; r < 7; r++) {
+    const wd = (r + 1) % 7;   // data: 0 = söndag
+    h += `<span class="rl">${WEEK[r]}</span>`;
+    for (let hr = 0; hr < 24; hr++) {
+      const v = A.wdhr[wd * 24 + hr], ri = v ? rampIndex(v, sorted) : -1;
+      if (v > best.v) best = { v, r, hr };
+      h += `<div class="c" style="--x:${hr};--y:${r};background:${ri < 0 ? 'var(--surface-2)' : RAMP[ri]}" data-tip="${WEEK[r]} ${String(hr).padStart(2, '0')}–${String(hr + 1).padStart(2, '0')}|${v}"></div>`;
+    }
+  }
+  el.innerHTML = h;
+  el.onmousemove = e => { const c = e.target.closest('.c'); if (!c) return hideTip(); const [t, v] = c.dataset.tip.split('|'); showTip(e, `<b>${t}</b>${fmt(+v)} annonser publicerade`); };
+  el.onmouseleave = hideTip;
+  const tot = A.wdhr.reduce((a, b) => a + b, 0);
+  $('#heat-best').textContent = tot ? `Flest publiceringar: ${WEEK[best.r].toLowerCase()} kl ${String(best.hr).padStart(2, '0')}. Lägger du upp då konkurrerar du med flest nya annonser, men har också flest köpare inne.` : '';
+}
+
+// ---------- karta ----------
+function drawMap(list) {
+  const cv = $('#map'), g = S.ov.geoGrid, cells = new Map();
+  for (const s of list) for (const [i, j, n] of (S.ov.subGeo[s.sub] || [])) { const k = i * 1000 + j; cells.set(k, (cells.get(k) || 0) + n); }
+  if (!cells.size) { cv.replaceWith(Object.assign(document.createElement('div'), { className: 'empty-chart', textContent: 'Inga koordinater i urvalet.' })); return; }
+  // Beskär till området där annonserna finns (90 % av dem), med lite marginal.
+  const arr = [...cells.entries()].map(([k, n]) => ({ i: Math.floor(k / 1000), j: k % 1000, n })).sort((a, b) => b.n - a.n);
+  const tot = arr.reduce((s, c) => s + c.n, 0); let acc = 0; const core = [];
+  for (const c of arr) { core.push(c); acc += c.n; if (acc >= tot * .93) break; }
+  let i0 = Math.min(...core.map(c => c.i)) - 2, i1 = Math.max(...core.map(c => c.i)) + 2, j0 = Math.min(...core.map(c => c.j)) - 2, j1 = Math.max(...core.map(c => c.j)) + 2;
+  const hi = HOME, hiI = (hi.lat - g.lat0) / g.dlat, hiJ = (hi.lon - g.lon0) / g.dlon; i0 = Math.min(i0, Math.floor(hiI) - 1); i1 = Math.max(i1, Math.ceil(hiI) + 1); j0 = Math.min(j0, Math.floor(hiJ) - 1); j1 = Math.max(j1, Math.ceil(hiJ) + 1);
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, cols = j1 - j0 + 1, rows = i1 - i0 + 1;
+  const kmW = cols * g.dlon * 111 * Math.cos(59.4 * Math.PI / 180), kmH = rows * g.dlat * 111, H = Math.min(560, Math.max(300, W * kmH / kmW));
+  cv.style.height = H + 'px'; cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  const cw = W / cols, ch = H / rows, sorted = arr.map(c => c.n).sort((a, b) => a - b);
+  const X = j => (j - j0) * cw, Y = i => H - (i - i0 + 1) * ch;
+  const draw = k => {
+    ctx.clearRect(0, 0, W, H);
+    for (const c of arr) { if (c.i < i0 || c.i > i1 || c.j < j0 || c.j > j1) continue; ctx.globalAlpha = k; ctx.fillStyle = RAMP[rampIndex(c.n, sorted)]; ctx.fillRect(X(c.j) + .5, Y(c.i) + .5, Math.max(1, cw - 1), Math.max(1, ch - 1)); }
+    ctx.globalAlpha = 1; ctx.font = '600 11px ' + Chart.defaults.font.family; ctx.textAlign = 'center';
+    for (const p of PLACES) { const x = X((p.lon - g.lon0) / g.dlon), y = Y((p.lat - g.lat0) / g.dlat) + ch / 2; if (x < 0 || x > W || y < 0 || y > H) continue; ctx.fillStyle = 'rgba(232,236,241,.85)'; ctx.fillText(p.n, x, y - 6); }
+    const hx = X(hiJ) + 0, hy = Y(hiI) + ch; ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.fillStyle = '#F2C52E'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#161A20'; ctx.stroke();
+    ctx.fillStyle = '#F2C52E'; ctx.textAlign = 'left'; ctx.fillText(HOME.name, hx + 9, hy + 4);
+  };
+  if (REDUCED) draw(1); else { const t0 = performance.now(); const step = t => { const k = Math.min(1, (t - t0) / 700); draw(k); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); }
+  cv.onmousemove = e => {
+    const r = cv.getBoundingClientRect(), j = Math.floor((e.clientX - r.left) / cw) + j0, i = i0 + rows - 1 - Math.floor((e.clientY - r.top) / ch);
+    const n = cells.get(i * 1000 + j); if (!n) return hideTip();
+    const lat = g.lat0 + (i + .5) * g.dlat, lon = g.lon0 + (j + .5) * g.dlon, km = Math.hypot((lat - HOME.lat) * 111, (lon - HOME.lon) * 111 * Math.cos(HOME.lat * Math.PI / 180));
+    showTip(e, `<b>${fmt(n)} annonser</b>${Math.round(km)} km från ${HOME.name}`);
+  };
+  cv.onmouseleave = hideTip;
+}
+
+// ---------- märken ----------
+function drawBrands(list) {
+  const m = new Map();
+  for (const s of list) for (const [name, n, medP, gone, d50] of s.brands) {
+    if (!m.has(name)) m.set(name, { name, n: 0, p: [], gone: 0, d: [] }); const o = m.get(name);
+    o.n += n; o.p.push([medP, n]); o.gone += gone; o.d.push([d50, gone]);
+  }
+  const rows = [...m.values()].sort((a, b) => b.n - a.n).slice(0, 10), mx = rows.length ? rows[0].n : 1;
+  $('#brands').innerHTML = rows.length ? rows.map(b => { const p = wmedian(b.p), d = wmedian(b.d);
+    return `<div class="rank-row" style="cursor:default"><span class="nm">${esc(b.name)}<small>${kr(p)}${d != null ? ` · säljs på ${d} d` : ''}</small></span><span class="v">${fmt(b.n)}</span><span class="track"><div style="width:${b.n / mx * 100}%"></div></span></div>`; }).join('')
+    : '<p class="muted small">Blocket anger märke bara i vissa kategorier.</p>';
+}
+
+// ---------- fynd ----------
+function drawDeals(list) {
+  const ids = new Set(list.map(s => s.sub)), ov = S.ov;
+  let deals = S.sub || S.cat ? list.flatMap(s => s.deals.map(d => [...d, s.sub])) : ov.deals;
+  deals = deals.filter(d => ids.has(d[9])).sort((a, b) => a[2] / a[3] - b[2] / b[3]).slice(0, 24);
+  $('#deals').innerHTML = deals.length ? deals.map(([id, t, p, ref, img, loc, pubDay, brand, cond, sub]) => `<a class="deal" href="${ov.urlBase}${id}" target="_blank" rel="noopener">
+      <div class="im">${img ? `<img loading="lazy" src="${ov.imgBase}${esc(img)}" alt="">` : ''}<span class="off">−${Math.round((1 - p / ref) * 100)} %</span></div>
+      <div class="p"><span>${kr(p)}</span><span class="muted" style="font-weight:500">median ${kr(ref)}</span></div>
+      <div class="t">${esc(t)}</div><div class="m">${esc(brand)} · ${esc(loc)} · ${ov.day - pubDay} d</div></a>`).join('')
+    : '<p class="muted small">Inga tydliga fynd i urvalet just nu.</p>';
+}
+
+// ---------- tabell ----------
+function spark(arr) {
+  const w = 90, h = 22, mx = Math.max(1, ...arr); const pts = arr.map((v, i) => `${(i / (arr.length - 1) * w).toFixed(1)},${(h - 2 - v / mx * (h - 4)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="#3987e5" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+}
+function drawTable() {
+  const cols = [
+    ['name', 'Underkategori', s => esc(s.name), s => s.name], ['catName', 'Kategori', s => esc(s.catName), s => s.catName],
+    ['active', 'Aktiva', s => fmt(s.active), s => s.active, 1], ['new', 'Nya/dygn', s => fmt(s.new), s => s.new, 1], ['gone30', 'Borta 30 d', s => fmt(s.gone30), s => s.gone30, 1],
+    ['speed', speedLabel(), s => speedFmt(speedOf(s)), s => speedOf(s), 1], ['sell', 'Säljtid', s => s.sell.d50 != null ? s.sell.d50 + ' d' : '–', s => s.sell.d50 ?? 1e9, 1],
+    ['p50', 'Median', s => kr(s.p[2]), s => s.p[2] ?? -1, 1], ['iqr', 'Halva priserna', s => s.p[1] != null ? `${short(s.p[1])}–${short(s.p[3])}` : '–', s => s.p[3] ?? -1, 1],
+    ['ship', 'Frakt', s => pct(s.ship, s.active), s => s.active ? s.ship / s.active : 0, 1], ['drops', 'Sänkt', s => pct(s.drops, s.active), s => s.active ? s.drops / s.active : 0, 1],
+    ['spark', '60 d', s => spark(s.pubDays), null]];
+  const pool = S.cat ? S.ov.subs.filter(s => s.cat === S.cat) : S.ov.subs;
+  const c = cols.find(x => x[0] === S.sort.k) || cols[2];
+  const rows = [...pool].sort((a, b) => { const x = c[3](a), y = c[3](b); return (typeof x === 'string' ? x.localeCompare(y, 'sv') : x - y) * S.sort.dir; });
+  $('#table').innerHTML = `<table class="table"><thead><tr>${cols.map(([k, l, , g, r]) => `<th class="${r ? 'r' : ''}" ${g ? `data-sort="${k}"` : ''} ${k === S.sort.k ? `aria-sort="${S.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${l}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(s => `<tr data-pick="${s.sub}" class="${s.sub === S.sub ? 'sel' : ''}">${cols.map(([k, , f, , r]) => `<td class="${r ? 'r' : ''}">${f(s)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+// ---------- händelser ----------
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.id === 'f-cat') { S.cat = t.value; S.sub = ''; render(); }
+  if (t.id === 'f-sub') { S.sub = t.value; render(); }
+  if (t.id === 'f-w') { location.search = '?w=' + encodeURIComponent(t.value); }
+});
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-period],[data-color],[data-rank],[data-pick],[data-sort],[data-go]'); if (!t) return;
+  if (t.dataset.period != null) { S.period = +t.dataset.period; render(); return; }
+  if (t.dataset.color) { S.color = t.dataset.color; document.querySelectorAll('[data-color]').forEach(b => b.setAttribute('aria-pressed', b === t)); drawTree(); return; }
+  if (t.dataset.rank) { S.rank = t.dataset.rank; document.querySelectorAll('[data-rank]').forEach(b => b.setAttribute('aria-pressed', b === t)); drawRank(); return; }
+  if (t.dataset.sort) { const k = t.dataset.sort; S.sort = { k, dir: S.sort.k === k ? -S.sort.dir : (k === 'name' || k === 'catName' || k === 'sell' ? 1 : -1) }; drawTable(); return; }
+  if (t.dataset.pick) { const s = subOf(t.dataset.pick); S.cat = s.cat; S.sub = s.sub; render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); return; }
+  if (t.dataset.go != null) { S.cat = t.dataset.go; S.sub = ''; render(); }
+});
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.ov) { drawTree(); drawMap(subsIn()); } }, 200); });
+addEventListener('hashchange', () => { if (!S.ov) return; const c = S.cat, s = S.sub, p = S.period; readHash(); if (c !== S.cat || s !== S.sub || p !== S.period) render(); });
+if (!window.Chart) fail('Kunde inte ladda diagrambiblioteket. Kolla internetanslutningen.'); else boot();
+</script>
+</body>
+</html>

@@ -1,15 +1,23 @@
 name: Databas
 
-# Djupscrape av hela Blocket-kategorier (bevakningar i data/bevakningar.json).
-# Databasen sparas på grenen "db" som en enda commit utan historik, så att repot inte växer för varje körning.
+# Djupscrape av Blocket (bevakningar i data/bevakningar.json), inklusive "Hela Blocket" i ett område.
+# 1. plan:  delar upp arbetet i parallella jobb (hela Blocket delas per underkategori)
+# 2. scrape: varje jobb hämtar sina annonser och laddar upp resultatet
+# 3. spara: slår ihop allt, räknar fram översikt och trender och sparar på grenen "db"
+# Grenen "db" är en enda commit utan historik, så att repot inte växer för varje körning.
 
 on:
   workflow_dispatch:
     inputs:
       bevakning:
-        description: 'Id på bevakningen, eller "alla"'
+        description: 'Id på bevakningen, "alla" eller "nya"'
         type: string
         default: 'alla'
+  # En ny bevakning från appen sparas i data/bevakningar.json och körs direkt.
+  push:
+    branches: [main]
+    paths:
+      - 'data/bevakningar.json'
   # Varje natt kl 04 svensk tid: följer prisändringar och vilka annonser som försvinner (säljs).
   schedule:
     - cron: '0 3 * * *'
@@ -22,12 +30,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  databas:
+  plan:
     runs-on: windows-latest
-    timeout-minutes: 120
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
     steps:
       - uses: actions/checkout@v4
+      - name: Planera jobben
+        id: plan
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force dbdata | Out-Null
+          git fetch --depth=1 origin db 2>$null
+          if ($LASTEXITCODE -eq 0) { git show FETCH_HEAD:index.json | Set-Content -Encoding UTF8 dbdata\index.json }
+          $ErrorActionPreference = 'Stop'
+          .\scripts\plan.ps1 -Watch "${{ inputs.bevakning || (github.event_name == 'push' && 'nya') || 'alla' }}" -DbDir dbdata
 
+  scrape:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    name: ${{ matrix.name }}
+    runs-on: windows-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
       - name: Hämta befintlig databas
         shell: powershell
         run: |
@@ -37,14 +69,45 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             git archive --format=tar -o "$env:RUNNER_TEMP\db.tar" FETCH_HEAD
             tar -xf "$env:RUNNER_TEMP\db.tar" -C dbdata
-            Write-Host "Befintlig databas: $((Get-ChildItem dbdata).Count) filer"
           } else { Write-Host 'Ingen databas än, börjar från noll.' }
           exit 0
-
       - name: Djupscrape
         shell: powershell
-        run: .\scripts\deep.ps1 -Watch "${{ inputs.bevakning || 'alla' }}" -DbDir dbdata
+        run: .\scripts\deep.ps1 -Watch "${{ matrix.watch }}" -Subs "${{ matrix.subs }}" -DbDir dbdata -OutDir ut
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: del-${{ strategy.job-index }}
+          path: ut/
+          retention-days: 2
+          if-no-files-found: ignore
 
+  spara:
+    needs: [plan, scrape]
+    if: always() && needs.plan.outputs.count != '0'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hämta befintlig databas
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force dbdata | Out-Null
+          git fetch --depth=1 origin db 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            git archive --format=tar -o "$env:RUNNER_TEMP\db.tar" FETCH_HEAD
+            tar -xf "$env:RUNNER_TEMP\db.tar" -C dbdata
+          }
+          exit 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: del-*
+          merge-multiple: true
+          path: dbdata
+      - name: Översikt och trender
+        shell: powershell
+        run: .\scripts\aggregate.ps1 -DbDir dbdata
       - name: Spara databasen på grenen db
         shell: powershell
         run: |
@@ -57,3 +120,5 @@ jobs:
           $commit = git commit-tree $tree -m "Databas $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
           Remove-Item Env:GIT_INDEX_FILE
           git push -f origin "$($commit):refs/heads/db"
+          $mb = [math]::Round(((Get-ChildItem dbdata -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1)
+          Write-Host "Databasen sparad: $mb MB"

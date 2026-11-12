@@ -84,6 +84,16 @@ p { margin: 0; }
 .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
 .chip { flex: 0 0 auto; padding: 8px 15px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: .88rem; font-weight: 500; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+nav.tabs a.ext { color: var(--tag); border-color: color-mix(in srgb, var(--tag) 40%, var(--line)); }
+/* Bevakningar: ett rutnät som radbryts, aldrig sidoskroll. */
+.watch-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.watch { display: grid; gap: 2px; text-align: left; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; min-width: 0; }
+.watch b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch span { font-size: .78rem; color: var(--muted); }
+.watch[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.watch.big { border-color: color-mix(in srgb, var(--tag) 45%, var(--line)); }
+.watch.big b::before { content: "★ "; color: var(--tag); }
+.sub-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 18px; display: grid; gap: 16px; min-width: 0; }
 .note { padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); font-size: .92rem; }
@@ -245,6 +255,7 @@ details.panel[open] > summary::after { content: " ▴"; }
         <a href="#databas" data-tab="databas">Databas</a>
         <a href="#statistik" data-tab="statistik">Statistik</a>
         <a href="#installningar" data-tab="installningar">Inställningar</a>
+        <a href="statistik.html" class="ext">Marknaden ↗</a>
       </nav>
       <small class="muted" id="status">Laddar…</small>
     </div>
@@ -730,7 +741,10 @@ function invItemHTML(i) {
 function renderStats() {
   const el = $('#v-statistik');
   const all = [...S.terms.values()].map(t => ({ t, v: valuation(t), sp: speed(t) }));
-  if (!all.length) { el.innerHTML = `<div class="panel empty"><h3>Ingen statistik än</h3></div>`; return; }
+  const bigLink = `<a class="panel" href="statistik.html" style="text-decoration:none;color:inherit;border-color:color-mix(in srgb, var(--tag) 45%, var(--line))">
+    <div class="spread"><div><div class="lbl" style="color:var(--tag)">Nytt</div><h3>Stora statistiken: hela Blocket ↗</h3></div><span class="btn small">Öppna</span></div>
+    <p class="muted small">Trender, grafer och karta över alla kategorier. Bäst på datorskärm.</p></a>`;
+  if (!all.length) { el.innerHTML = bigLink + `<div class="panel empty"><h3>Ingen statistik än</h3></div>`; return; }
   const withV = all.filter(x => x.v);
   const top = [...withV].sort((a, b) => b.v.max - a.v.max).slice(0, 12), topMax = Math.max(1, ...top.map(x => x.v.max));
   const fast = all.filter(x => x.sp.rank < 999).sort((a, b) => a.sp.rank - b.sp.rank).slice(0, 10);
@@ -740,7 +754,7 @@ function renderStats() {
   const gap = withV.filter(x => x.v.tv && x.t.blocket && x.t.blocket.stats).map(x => ({ ...x, ratio: x.t.blocket.stats.med / x.v.tv })).sort((a, b) => b.ratio - a.ratio).slice(0, 8);
   const bars = (rows, max, val, lab, right) => rows.map(r => `<div class="barrow"><span class="lab" title="${esc(lab(r))}">${esc(lab(r))}</span><div class="bar" style="width:${Math.max(2, val(r) / max * 100)}%"></div><span class="num" style="text-align:right">${right(r)}</span></div>`).join('');
   const last = S.meta && S.meta.generatedAt;
-  el.innerHTML = `
+  el.innerHTML = bigLink + `
     <div class="tiles">
       <div class="tile"><span>Sökord i katalogen</span><b class="num">${all.length}</b><span>${all.reduce((s, x) => s + dataCount(x.t), 0).toLocaleString('sv-SE')} annonser analyserade</span></div>
       <div class="tile"><span>Värda att leta efter</span><b class="num">${withV.filter(x => x.v.max >= 50).length}</b><span>maxpris minst 50 kr</span></div>
@@ -781,10 +795,24 @@ async function loadDbMeta() {
   render();
   if (S.dbSel) loadDb(S.dbSel);
 }
+// Hela-Blocket-bevakningar har en fil per underkategori: <id>/<underkategori>.json
+const isBig = w => w && w.mode === 'alla';
+function dbFileKey(id) {
+  const w = (S.watches || []).find(x => x.id === id);
+  if (!isBig(w)) return id;
+  const cats = (S.bcats && S.bcats.categories) || [];
+  let sub = store.get('tk-dbsub-' + id, null);
+  if (!cats.some(c => c.subs.some(s => s.value === sub))) sub = cats.length && cats[0].subs.length ? cats[0].subs[0].value : null;
+  S.dbSub = sub;
+  return sub ? `${id}/${sub}` : null;
+}
 async function loadDb(id) {
-  if (S.db && S.db.watch && S.db.watch.id === id) return;
-  S.dbSel = id; S.db = null; S.dbLoading = true; render();
-  try { S.db = await readDbFile(`${id}.json`); } catch { S.db = null; }
+  const key = dbFileKey(id);
+  if (S.db && S.db.watch && S.db.watch.id === key) return;
+  S.dbSel = id; S.db = null; S.dbLoading = !!key; render();
+  if (!key) return;
+  try { S.db = await readDbFile(`${key}.json`); } catch { S.db = null; }
+  if (S.dbSel !== id || dbFileKey(id) !== key) return;   // användaren hann byta
   S.dbLoading = false; render();
 }
 function dbRows() {
@@ -831,14 +859,15 @@ function filteredDbRows() {
 function renderDatabas() {
   const el = $('#v-databas');
   if (!S.dbMetaLoaded) { el.innerHTML = `<div class="empty muted"><span class="spinner"></span>Hämtar databasen…</div>`; if (!S.dbMetaLoading) loadDbMeta(); return; }
-  const watches = S.watches || [];
+  const watches = [...(S.watches || [])].sort((a, b) => isBig(b) - isBig(a));
   const list = watches.map(w => { const i = S.dbIndex.get(w.id);
-    return `<button class="chip" data-dbsel="${esc(w.id)}" aria-pressed="${S.dbSel === w.id}">${esc(w.name)}${i ? ` · ${i.active.toLocaleString('sv-SE')}` : ' · väntar'}</button>`; }).join('');
+    return `<button class="watch${isBig(w) ? ' big' : ''}" data-dbsel="${esc(w.id)}" aria-pressed="${S.dbSel === w.id}"><b>${esc(w.name)}</b>
+      <span>${i ? `${i.active.toLocaleString('sv-SE')} annonser${i.subs ? ` · ${i.subs} underkategorier` : ''} · ${when(i.updatedAt)}` : 'Väntar på första körningen'}</span></button>`; }).join('');
   el.innerHTML = `
     <div class="panel">
-      <div class="spread"><h2>Databas</h2><button class="btn small" data-dbform="1">${S.dbShowForm ? 'Stäng' : '+ Ny bevakning'}</button></div>
+      <div class="spread"><h2>Databas</h2><div class="row"><a class="btn small" href="statistik.html">Stora statistiken ↗</a><button class="btn small" data-dbform="1">${S.dbShowForm ? 'Stäng' : '+ Ny bevakning'}</button></div></div>
       <p class="muted small">Hämtar alla annonser i en Blocket-kategori varje natt. Annonser som försvinner räknas som sålda eller borttagna, och det ger säljtid och säljtakt.</p>
-      ${watches.length ? `<div class="chips">${list}</div>` : '<p class="muted">Inga bevakningar än. Skapa en med knappen ovan.</p>'}
+      ${watches.length ? `<div class="watch-list">${list}</div>` : '<p class="muted">Inga bevakningar än. Skapa en med knappen ovan.</p>'}
       ${S.dbShowForm ? watchFormHTML() : ''}
     </div>
     ${S.dbSel ? dbViewHTML() : ''}`;
@@ -848,7 +877,7 @@ function watchFormHTML() {
   const opts = cats.map(c => `<option value="category|${c.value}|${esc(c.name)}">${esc(c.name)} (${c.hits.toLocaleString('sv-SE')})</option>` +
     c.subs.map(s => `<option value="${s.param}|${s.value}|${esc(c.name + ' › ' + s.name)}">  › ${esc(s.name)} (${s.hits.toLocaleString('sv-SE')})</option>`).join('')).join('');
   return `<form id="watchForm" class="form-grid" style="border-top:1px solid var(--line);padding-top:16px">
-    <div class="field" style="grid-column:1/-1"><label for="w-cat">Kategori</label><select id="w-cat"><option value="">Alla kategorier (kräver sökord)</option>${opts}</select></div>
+    <div class="field" style="grid-column:1/-1"><label for="w-cat">Kategori</label><select id="w-cat"><option value="alla|alla|Alla kategorier">★ Hela Blocket – alla kategorier (en fil per underkategori)</option><option value="">Sökord i alla kategorier</option>${opts}</select></div>
     <div class="field"><label for="w-reg">Område</label><select id="w-reg"><option value="">Hela Sverige</option>${regs.map(r => `<option value="${r.value}|${esc(r.name)}" ${r.name === 'Stockholm' ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
     <div class="field"><label for="w-q">Sökord (valfritt)</label><input id="w-q" type="text" placeholder="t.ex. thule"></div>
     <div class="field"><label for="w-min">Pris från</label><input id="w-min" type="number" min="0" inputmode="numeric"></div>
@@ -857,18 +886,26 @@ function watchFormHTML() {
     <div class="field" style="grid-column:1/-1"><label for="w-name">Namn</label><input id="w-name" type="text" placeholder="Fylls i automatiskt"></div>
     <label class="row small login"><input type="checkbox" id="w-cond" checked> Hämta skick (tar ungefär dubbelt så lång tid)</label>
     <button class="btn primary" type="submit" ${gh.token ? '' : 'disabled'}>Skapa och kör</button>
-    <p class="muted small" style="grid-column:1/-1">Ungefär 1 minut per 2 000 annonser på GitHub. Stora kategorier delas upp per län och prisintervall. Ett område i taget brukar räcka för att hitta flippar nära dig.</p>
+    <p class="muted small" style="grid-column:1/-1">Ungefär 1 minut per 2 000 annonser på GitHub. Stora kategorier delas upp per län, kommun och prisintervall. Hela Blocket i Stockholms län är ca 335 000 annonser och körs som 15 parallella jobb (ca 20 min). Hela Sverige är ungefär fyra gånger så mycket.</p>
   </form>`;
 }
 function dbViewHTML() {
   const w = (S.watches || []).find(x => x.id === S.dbSel), idx = S.dbIndex.get(S.dbSel);
   if (!w) return '';
+  let picker = '';
+  if (isBig(w)) {
+    const cats = (S.bcats && S.bcats.categories) || [], cat = cats.find(c => c.subs.some(s => s.value === S.dbSub)) || cats[0];
+    picker = cat ? `<div class="sub-pick">
+      <div class="field"><label for="db-cat">Kategori</label><select id="db-cat" data-dbsub="cat">${cats.map(c => `<option value="${c.value}" ${c === cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="db-sub">Underkategori</label><select id="db-sub" data-dbsub="sub">${cat.subs.map(s => `<option value="${s.value}" ${s.value === S.dbSub ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
+    </div><p class="muted small">Trender och jämförelser mellan alla kategorier finns i <a href="statistik.html">stora statistiken</a>, som är byggd för datorskärm.</p>` : '';
+  }
   const head = `<div class="spread"><div><div class="lbl">${esc(w.categoryName || 'Alla kategorier')}${w.locationName ? ' · ' + esc(w.locationName) : ''}${w.q ? ' · ”' + esc(w.q) + '”' : ''}</div>
       <h2>${esc(w.name)}</h2>${idx ? `<div class="muted small">Uppdaterad ${when(idx.updatedAt)} · ${(idx.bytes / 1048576).toFixed(1)} MB${idx.complete ? '' : ' · ofullständig körning'}</div>` : ''}</div>
       <div class="row"><button class="btn small" data-dbrun="${esc(w.id)}" ${gh.token ? '' : 'disabled'}>Kör nu</button>
-      <button class="btn small danger" data-dbdel="${esc(w.id)}" ${gh.token ? '' : 'disabled'}>${S.confirm === 'w:' + w.id ? 'Säker?' : 'Ta bort'}</button></div></div>`;
+      <button class="btn small danger" data-dbdel="${esc(w.id)}" ${gh.token ? '' : 'disabled'}>${S.confirm === 'w:' + w.id ? 'Säker?' : 'Ta bort'}</button></div></div>${picker}`;
   if (S.dbLoading) return `<div class="panel">${head}<div class="empty muted"><span class="spinner"></span>Laddar annonserna…</div></div>`;
-  if (!S.db) return `<div class="panel">${head}<p class="muted">Ingen data än. Första körningen tar några minuter. Tryck ”Kör nu” om den inte redan har startat.</p></div>`;
+  if (!S.db) return `<div class="panel">${head}<p class="muted">${isBig(w) ? 'Ingen data för den här underkategorin än. Hela Blocket tar runt 20 minuter första gången.' : 'Ingen data än. Första körningen tar några minuter. Tryck ”Kör nu” om den inte redan har startat.'}</p></div>`;
   const all = dbRows(), rows = filteredDbRows(), f = S.dbFilter;
   const act = rows.filter(r => !r.gone), gone = rows.filter(r => r.gone);
   const today = S.db.today, gone30 = gone.filter(r => today - r.gone <= 30);
@@ -1162,6 +1199,13 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.open) { 
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.dbf && el.tagName === 'SELECT') { S.dbFilter[el.dataset.dbf] = el.value; S.dbLimit = 60; render(); return; }
+  if (el.dataset.dbsub) {
+    // Byt underkategori i en Hela Blocket-bevakning. Kategoriväljaren hoppar till kategorins första underkategori.
+    let sub = el.value;
+    if (el.dataset.dbsub === 'cat') { const c = ((S.bcats && S.bcats.categories) || []).find(x => x.value === el.value); sub = c && c.subs[0] ? c.subs[0].value : null; }
+    if (sub) { store.set('tk-dbsub-' + S.dbSel, sub); S.dbLimit = 60; S.dbFilter.brand = ''; loadDb(S.dbSel); }
+    return;
+  }
   if (el.id === 'sort') { S.sort = el.value; store.set('tk-sort', S.sort); render(); return; }
   const item = el.closest('[data-inv]');
   if (item && el.dataset.f) {
@@ -1234,18 +1278,21 @@ document.addEventListener('submit', async e => {
   }
   if (f.id === 'watchForm') {
     const [param, value, catName] = ($('#w-cat').value || '||').split('|'); const [loc, locName] = ($('#w-reg').value || '|').split('|');
-    const q = $('#w-q').value.trim();
+    const q = $('#w-q').value.trim(), big = param === 'alla';
     if (!value && !q) { toast('Välj en kategori eller skriv ett sökord.'); return; }
-    const name = $('#w-name').value.trim() || [catName ? catName.split(' › ').pop() : '', q ? '”' + q + '”' : '', locName || 'Hela Sverige'].filter(Boolean).join(' · ');
+    if (big && (S.watches || []).some(x => isBig(x) && x.location === (loc || ''))) { toast('Det området har redan en Hela Blocket-bevakning.'); return; }
+    const name = $('#w-name').value.trim() || (big ? 'Hela Blocket · ' + (locName || 'Sverige') : [catName ? catName.split(' › ').pop() : '', q ? '”' + q + '”' : '', locName || 'Hela Sverige'].filter(Boolean).join(' · '));
     const id = slug(name).slice(0, 60) + '-' + Date.now().toString(36).slice(-4);
-    const w = { id, name, category: value || '', categoryParam: param || 'category', categoryName: catName || '', location: loc || '', locationName: locName || '', q,
+    const w = big
+      ? { id, name, mode: 'alla', categoryName: 'Alla kategorier', location: loc || '', locationName: locName || '', q: '', conditions: $('#w-cond').checked, keepGoneDays: 45, enabled: true, createdAt: new Date().toISOString() }
+      : { id, name, category: value || '', categoryParam: param || 'category', categoryName: catName || '', location: loc || '', locationName: locName || '', q,
       priceFrom: +$('#w-min').value || null, priceTo: +$('#w-max').value || null, maxListings: Math.min(40000, Math.max(100, +$('#w-cap').value || 15000)),
       conditions: $('#w-cond').checked, enabled: true, createdAt: new Date().toISOString() };
     try {
+      // Sparningen startar körningen på GitHub automatiskt (databas.yml lyssnar på data/bevakningar.json).
       await updateRepoJson('data/bevakningar.json', arr => (arr || []).concat([w]), 'Ny bevakning: ' + name);
       S.watches = (S.watches || []).concat([w]); S.dbShowForm = false; S.dbSel = id; S.db = null; store.set('tk-dbsel', id);
-      await dispatchDb(id).catch(() => {});
-      render(); toast('Bevakningen är skapad och första körningen har startat.');
+      render(); toast('Bevakningen är skapad. Första körningen startar på GitHub inom en minut.');
     } catch (err) { toast('Kunde inte spara: ' + err.message); }
     return;
   }
