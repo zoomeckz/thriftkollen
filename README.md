@@ -31,10 +31,12 @@ Appen visar vad som lönar sig att plocka med sig och hur mycket du högst kan b
 1. **Hemlighet för bildigenkänning:** Settings → Secrets and variables → Actions → New repository secret.
    Namn `ANTHROPIC_API_KEY`, värde din nyckel från console.anthropic.com. Utan den används bara texten du skriver.
 2. **GitHub Pages:** Settings → Pages → Deploy from a branch → `main` / `(root)`.
-3. **Nyckel för mobilen:** skapa en *fine-grained personal access token* som bara gäller det här repot,
-   med **Contents: Read and write** och **Actions: Read and write**. Klistra in den i appen under Inställningar.
-   Nyckeln sparas bara i mobilen.
-
+3. **Nyckel för appen:** skapa en *fine-grained personal access token* som bara gäller det här repot,
+   med **Contents: Read and write** och **Actions: Read and write**. Klistra in den i appen under Inställningar → Avancerat.
+4. **Spara nyckeln på kontot:** välj ett lösenord under Inställningar → Konto. Nyckeln krypteras i webbläsaren
+   (PBKDF2-SHA256, 600 000 varv, AES-GCM-256) och bara den krypterade versionen sparas i data/konto.json.
+   På en annan mobil eller dator öppnar du appen och loggar in med lösenordet. Lånar du någons mobil, bocka ur
+   "Kom ihåg mig", så glöms nyckeln när fliken stängs.
 ## Köra scrapen på datorn
 
 Dubbelklicka på `Thriftkollen-scrape.bat`. Den scrapar alla sökord och pushar resultatet till GitHub.

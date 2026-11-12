@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#161A20">
+<meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Thriftkollen">
 <title>Thriftkollen</title>
@@ -13,28 +14,15 @@
 <style>
 /* Layout: mobile-first app. Sticky snabbkoll-bar högst upp, flikar under, kortrutnät som blir en kolumn på mobil.
    Prislappen (gul, med hål) är signaturdetaljen: det är maxpriset du får betala i butiken. */
+/* Alltid mörkt tema, oavsett telefonens inställning. */
 :root {
-  --bg: #F2F4F7; --surface: #FFFFFF; --surface-2: #E8ECF1; --ink: #141820; --muted: #5B6573; --line: #D8DEE6;
-  --accent: #1F4FD1; --accent-ink: #FFFFFF; --tag: #FFD84D; --tag-ink: #2A2200;
-  --good: #1D7F47; --good-bg: #DDF3E5; --warn: #9A6410; --warn-bg: #FBEFD6; --bad: #B8322B; --bad-bg: #FBE1DF;
-  --tradera: #C98F00; --blocket: #1F4FD1;
-  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --r: 14px; color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0E1115; --surface: #161A20; --surface-2: #1E242C; --ink: #E8ECF1; --muted: #98A2AF; --line: #2A313B;
-    --accent: #7EA0FF; --accent-ink: #0B1020; --tag: #F2C52E; --tag-ink: #221A00;
-    --good: #4CC583; --good-bg: #12301F; --warn: #E6B055; --warn-bg: #33270F; --bad: #F2766E; --bad-bg: #3A1816;
-    --tradera: #F2C52E; --blocket: #7EA0FF; color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
   --bg: #0E1115; --surface: #161A20; --surface-2: #1E242C; --ink: #E8ECF1; --muted: #98A2AF; --line: #2A313B;
   --accent: #7EA0FF; --accent-ink: #0B1020; --tag: #F2C52E; --tag-ink: #221A00;
   --good: #4CC583; --good-bg: #12301F; --warn: #E6B055; --warn-bg: #33270F; --bad: #F2766E; --bad-bg: #3A1816;
-  --tradera: #F2C52E; --blocket: #7EA0FF; color-scheme: dark;
+  --tradera: #F2C52E; --blocket: #7EA0FF;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 14px; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -181,6 +169,15 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 /* Foto */
 .shot { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: start; }
 .shot img.photo { width: 120px; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
+.photo-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.batch { display: grid; gap: 10px; }
+.batch-item { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.batch-item img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; }
+details.panel > summary { cursor: pointer; list-style: none; }
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary::after { content: " ▾"; color: var(--muted); }
+details.panel[open] > summary::after { content: " ▴"; }
+.login input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
 .preview { width: 100%; max-height: 320px; object-fit: contain; border-radius: 8px; background: var(--surface-2); }
 .fynd { display: grid; gap: 12px; }
 .compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
@@ -257,7 +254,7 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 <div id="sheet"></div>
 <div id="toast" class="toast" hidden></div>
 <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
-<input id="photoPick" type="file" accept="image/*" hidden>
+<input id="photoPick" type="file" accept="image/*" multiple hidden>
 <input id="invImport" type="file" accept=".json,application/json" hidden>
 
 <script>
@@ -278,11 +275,19 @@ function guessRepo() {
   if (h.endsWith('.github.io')) { const owner = h.split('.')[0]; const repo = location.pathname.split('/').filter(Boolean)[0] || `${owner}.github.io`; return { owner, repo }; }
   return { owner: '', repo: 'thriftkollen' };
 }
-const gh = Object.assign({ branch: 'main', token: '' }, guessRepo(), store.get('tk-github', {}));
+// Nyckeln: localStorage om "kom ihåg mig", annars sessionStorage (glöms när fliken stängs).
+const tokenStore = {
+  get() { try { return localStorage.getItem('tk-token') || sessionStorage.getItem('tk-token') || ''; } catch { return ''; } },
+  set(t, remember) { try { localStorage.removeItem('tk-token'); sessionStorage.removeItem('tk-token'); if (t) (remember ? localStorage : sessionStorage).setItem('tk-token', t); } catch {} },
+  remembered() { try { return !!localStorage.getItem('tk-token'); } catch { return false; } },
+};
+const ghSaved = store.get('tk-github', {});
+if (ghSaved.token) { tokenStore.set(ghSaved.token, true); delete ghSaved.token; store.set('tk-github', ghSaved); }
+const gh = Object.assign({ branch: 'main' }, guessRepo(), ghSaved, { token: tokenStore.get() });
 
 const S = { terms: new Map(), fynd: [], meta: null, inv: store.get('tk-inventory', []), cfg: { ...DEFAULT_CFG, ...store.get('tk-settings', {}) },
   pending: store.get('tk-pending', []), state: 'loading', loadErr: null, tab: 'fynd', cat: store.get('tk-cat', 'Alla'), sort: store.get('tk-sort', 'max'),
-  q: '', price: null, open: null, confirm: null, photo: null, uploading: false, run: null, fyndPrice: {} };
+  q: '', price: null, open: null, confirm: null, photos: [], photoCat: '', uploading: false, run: null, fyndPrice: {}, auth: null, menuOpen: false };
 
 // ---------- hjälpare ----------
 const $ = (s, r = document) => r.querySelector(s);
@@ -316,7 +321,9 @@ async function readRepoJson(path) {
   if (gh.token && gh.owner) {
     try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=${gh.branch}`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; }
   }
-  const r = await fetch(`./${path}?t=${Date.now()}`, { cache: 'no-store' });
+  let r = null;
+  if (gh.owner) { try { r = await fetch(rawUrl(path), { cache: 'no-store' }); if (!r.ok && r.status !== 404) r = null; } catch { r = null; } }
+  if (!r) r = await fetch(`./${path}?t=${Date.now()}`, { cache: 'no-store' });
   if (r.status === 404) return null;
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
@@ -572,59 +579,89 @@ function fyndHTML(f) {
     <div class="row"><button class="btn small" data-buy="${esc(ai.name || f.text || '')}" data-buyprice="${esc(f.id)}">Köpt! Lägg i lager</button>${retry}${searchLinks(ai.specificQuery || f.text || '')}</div>
   </div>`;
 }
+const MAX_BATCH = 20;
 function renderFoto() {
   const el = $('#v-foto');
   const ready = gh.token && gh.owner;
-  const p = S.photo;
+  const ps = S.photos;
   const run = S.run ? `<span class="pill">GitHub: ${esc({ queued: 'i kö', in_progress: 'kör', completed: S.run.conclusion === 'success' ? 'klar' : 'misslyckades' }[S.run.status] || S.run.status)}</span>` : '';
   el.innerHTML = `
     <div class="panel">
-      <h2>Fota en vara</h2>
-      ${!ready ? `<div class="note warn">För att skicka foton behöver appen en GitHub-nyckel på den här enheten. <a href="#installningar">Lägg in den under Inställningar</a>.</div>` : ''}
-      ${p ? `<img class="preview" src="${p.url}" alt="Förhandsvisning">` : `<button class="btn primary big" data-photo="camera">Ta bild</button>
-        <button class="btn" data-photo="pick">Välj bild från galleriet</button>`}
-      ${p ? `<form id="photoForm" class="form-grid">
-          <div class="field" style="grid-column:1/-1"><label for="photoText">Vad är det? (valfritt)</label><input id="photoText" type="text" placeholder="t.ex. barncykelstol Thule" value="${esc(p.text || '')}"></div>
-          <div class="field"><label for="photoCat">Kategori</label><select id="photoCat"><option value="">Låt AI avgöra</option>${CATS.map(c => `<option ${p.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
-          <button class="btn primary" type="submit" ${S.uploading || !ready ? 'disabled' : ''}>${S.uploading ? 'Skickar…' : 'Skicka och scrapa'}</button>
-          <button class="btn" type="button" data-photo="clear">Ta om</button>
-        </form>` : ''}
-      <p class="muted small">Claude känner igen varan och scrapar både samma märke och varutypen i stort. Det tar oftast 2–4 minuter. Varutypen hamnar också i katalogen och uppdateras vid varje full scrape.</p>
+      <h2>Fota varor</h2>
+      ${!ready ? loginFormHTML(true) : ''}
+      <div class="photo-actions">
+        <button class="btn primary big" data-photo="camera" ${ps.length >= MAX_BATCH ? 'disabled' : ''}>${ps.length ? 'Ta en bild till' : 'Ta bild'}</button>
+        <button class="btn big" data-photo="pick" ${ps.length >= MAX_BATCH ? 'disabled' : ''}>Välj flera från galleriet</button>
+      </div>
+      ${ps.length ? `<div class="batch">${ps.map((p, i) => `<div class="batch-item">
+          <img src="${p.thumb}" alt="Foto ${i + 1}">
+          <div class="field"><label for="pt-${i}">Vad är det? (valfritt)</label><input id="pt-${i}" data-ptext="${i}" type="text" placeholder="t.ex. barncykelstol Thule" value="${esc(p.text)}"></div>
+          <button class="btn small danger" type="button" data-premove="${i}" aria-label="Ta bort foto ${i + 1}">✕</button>
+        </div>`).join('')}</div>
+        <form id="photoForm" class="form-grid">
+          <div class="field"><label for="photoCat">Kategori för alla</label><select id="photoCat"><option value="">Låt AI avgöra</option>${CATS.map(c => `<option ${S.photoCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+          <button class="btn primary" type="submit" ${S.uploading || !ready ? 'disabled' : ''}>${S.uploading ? 'Skickar…' : `Skicka ${ps.length} ${ps.length === 1 ? 'foto' : 'foton'} och scrapa`}</button>
+          <button class="btn" type="button" data-photo="clear">Rensa</button>
+        </form>
+        <p class="muted small">Ett foto per sak. Kostar ungefär ${(ps.length * 0.12).toLocaleString('sv-SE', { maximumFractionDigits: 1 })} kr i bildigenkänning och tar ungefär ${Math.max(2, Math.round(1.5 + ps.length * 0.4))} minuter.</p>` : ''}
+      <p class="muted small">Upp till ${MAX_BATCH} foton i taget, ett per sak. Claude känner igen varje sak och scrapar både samma märke och varutypen i stort. Varutypen hamnar också i katalogen och uppdateras vid varje full scrape.</p>
     </div>
     ${S.pending.length ? `<div class="panel"><div class="spread"><h3>Scrapas just nu</h3>${run}</div>
       ${S.pending.map(x => `<div class="shot">${x.thumb ? `<img class="photo" src="${x.thumb}" alt="">` : ''}<div class="fynd"><div class="row"><span class="spinner"></span><b>${esc(x.text || 'Foto utan text')}</b></div>
       <div class="muted small">Skickat ${when(x.createdAt)}. Sidan uppdateras själv.</div></div></div>`).join('')}</div>` : ''}
     ${S.fynd.length ? S.fynd.map(fyndHTML).join('') : `<div class="panel empty"><h3>Inga fotade varor än</h3><p class="muted">Ta en bild på något i butiken, så visas jämförelsen här.</p></div>`}`;
 }
-async function onPhotoChosen(file) {
-  if (!file) return;
-  try {
-    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
-    const img = bmp || await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
-    const w = img.width, h = img.height, scale = Math.min(1, 1024 / Math.max(w, h));
-    const c = document.createElement('canvas'); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    const url = c.toDataURL('image/jpeg', 0.82);
-    const t = document.createElement('canvas'), s = 160 / Math.max(c.width, c.height); t.width = Math.round(c.width * s); t.height = Math.round(c.height * s);
-    t.getContext('2d').drawImage(c, 0, 0, t.width, t.height);
-    S.photo = { url, thumb: t.toDataURL('image/jpeg', 0.7), text: '', cat: '' };
-    render(); setTimeout(() => $('#photoText') && $('#photoText').focus(), 50);
-  } catch { toast('Kunde inte läsa bilden. Prova en annan.'); }
+async function prepPhoto(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
+  const img = bmp || await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  const w = img.width, h = img.height, scale = Math.min(1, 1024 / Math.max(w, h));
+  const c = document.createElement('canvas'); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const t = document.createElement('canvas'), s = 160 / Math.max(c.width, c.height); t.width = Math.round(c.width * s); t.height = Math.round(c.height * s);
+  t.getContext('2d').drawImage(c, 0, 0, t.width, t.height);
+  return { url: c.toDataURL('image/jpeg', 0.82), thumb: t.toDataURL('image/jpeg', 0.7), text: '' };
 }
-async function sendPhoto() {
-  const p = S.photo; if (!p) return;
-  p.text = $('#photoText').value.trim(); p.cat = $('#photoCat').value;
-  const id = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '-' + Math.random().toString(36).slice(2, 6);
+async function onPhotosChosen(files) {
+  const list = [...(files || [])].slice(0, MAX_BATCH - S.photos.length);
+  if (!list.length) { if (files && files.length) toast(`Max ${MAX_BATCH} foton i taget.`); return; }
+  let bad = 0;
+  for (const f of list) { try { S.photos.push(await prepPhoto(f)); } catch { bad++; } }
+  if (bad) toast(`${bad} bild(er) gick inte att läsa.`);
+  render();
+}
+// Lägger upp flera filer i en enda commit (Git Data API), så att GitHub bara startar en körning för hela omgången.
+async function commitFiles(files, message) {
+  for (const f of files) if (!f.blob) f.blob = (await api(repoPath('/git/blobs'), { method: 'POST', body: { content: f.b64, encoding: 'base64' } })).sha;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const ref = await api(repoPath(`/git/ref/heads/${gh.branch}`));
+    const base = await api(repoPath(`/git/commits/${ref.object.sha}`));
+    const tree = await api(repoPath('/git/trees'), { method: 'POST', body: { base_tree: base.tree.sha, tree: files.map(f => ({ path: f.path, mode: '100644', type: 'blob', sha: f.blob })) } });
+    const commit = await api(repoPath('/git/commits'), { method: 'POST', body: { message, tree: tree.sha, parents: [ref.object.sha] } });
+    try { await api(repoPath(`/git/refs/heads/${gh.branch}`), { method: 'PATCH', body: { sha: commit.sha, force: false } }); return commit; }
+    catch (e) { if (e.status !== 422 && e.status !== 409) throw e; }
+  }
+  throw new Error('Repot ändrades samtidigt. Försök igen.');
+}
+async function sendPhotos() {
+  const ps = S.photos; if (!ps.length) return;
+  S.photoCat = $('#photoCat').value;
   S.uploading = true; render();
   try {
-    await putFile(`uploads/${id}.jpg`, p.url.split(',')[1], `Foto ${id}`);
-    const job = { id, createdAt: new Date().toISOString(), text: p.text, cat: p.cat, image: `uploads/${id}.jpg` };
-    await putFile(`queue/${id}.json`, b64(JSON.stringify(job)), `Scrapa foto ${id}${p.text ? ': ' + p.text : ''}`);
-    S.pending.unshift({ id, createdAt: job.createdAt, text: p.text, thumb: p.thumb }); store.set('tk-pending', S.pending);
-    S.photo = null; toast('Skickat. Scrapen startar på GitHub.');
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const files = [], jobs = [];
+    ps.forEach((p, i) => {
+      const id = `${stamp}-${Math.random().toString(36).slice(2, 6)}${i}`;
+      const job = { id, createdAt: new Date().toISOString(), text: p.text.trim(), cat: S.photoCat, image: `uploads/${id}.jpg` };
+      files.push({ path: job.image, b64: p.url.split(',')[1] }, { path: `queue/${id}.json`, b64: b64(JSON.stringify(job)) });
+      jobs.push({ id, createdAt: job.createdAt, text: job.text, thumb: p.thumb });
+    });
+    const texts = jobs.map(j => j.text).filter(Boolean);
+    await commitFiles(files, `Scrapa ${jobs.length} ${jobs.length === 1 ? 'foto' : 'foton'}${texts.length ? ': ' + texts.slice(0, 3).join(', ') : ''}`);
+    S.pending = [...jobs, ...S.pending]; store.set('tk-pending', S.pending);
+    S.photos = []; toast(`${jobs.length} ${jobs.length === 1 ? 'foto' : 'foton'} skickade. Scrapen startar på GitHub.`);
     schedulePoll();
   } catch (e) {
-    toast(e.status === 401 || e.status === 403 ? 'GitHub nekade. Kolla nyckeln och dess behörigheter under Inställningar.' : 'Kunde inte skicka: ' + e.message);
+    toast(e.status === 401 || e.status === 403 ? 'GitHub nekade. Logga in igen under Inställningar.' : 'Kunde inte skicka: ' + e.message);
   } finally { S.uploading = false; render(); }
 }
 
@@ -710,15 +747,65 @@ function renderStats() {
       ${gap.map(x => `<tr data-open="${esc(x.t.id)}" style="cursor:pointer"><td style="text-transform:capitalize">${esc(x.t.q)}</td><td class="r">${kr(x.v.tv)}</td><td class="r">${kr(x.t.blocket.stats.med)}</td><td class="r">x${x.ratio.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 }
 
+// ---------- konto ----------
+// Nyckeln krypteras på enheten med ditt lösenord (PBKDF2 + AES-GCM) och bara den krypterade versionen sparas i repot.
+// På en ny enhet hämtas den krypterade filen och låses upp med lösenordet. Lösenordet lämnar aldrig enheten.
+const AUTH_PATH = 'data/konto.json', KDF_ITER = 600000;
+const bytesToB64 = u8 => { let s = ''; u8.forEach(b => s += String.fromCharCode(b)); return btoa(s); };
+const b64ToBytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveKey(pass, salt, iter) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function sealToken(token, pass) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(pass, salt, KDF_ITER);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(token)));
+  return { v: 1, kdf: 'PBKDF2-SHA256', iter: KDF_ITER, cipher: 'AES-GCM-256', salt: bytesToB64(salt), iv: bytesToB64(iv), ct: bytesToB64(ct), savedAt: new Date().toISOString() };
+}
+async function openToken(blob, pass) {
+  const key = await deriveKey(pass, b64ToBytes(blob.salt), blob.iter);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(blob.iv) }, key, b64ToBytes(blob.ct)));
+}
+async function loadAuth() { try { S.auth = await readRepoJson(AUTH_PATH); } catch { S.auth = null; } render(); }
+function loginFormHTML(compact) {
+  if (!S.auth) return compact ? `<div class="note warn">Logga in för att skicka foton. Ingen nyckel är sparad på kontot än, så lägg in den under <a href="#installningar">Inställningar</a> på din egen mobil först.</div>` : '';
+  return `<form class="${compact ? 'note' : 'panel'} login" id="loginForm" style="display:grid;gap:12px">
+    ${compact ? '<b>Logga in för att skicka foton</b>' : '<h2>Logga in</h2><p class="muted small">Skriv lösenordet du valde när nyckeln sparades på kontot.</p>'}
+    <div class="field"><label for="loginPw">Lösenord</label><input id="loginPw" type="password" autocomplete="current-password" required></div>
+    <label class="row small"><input type="checkbox" id="remember" ${S.borrowed ? '' : 'checked'}> Kom ihåg mig på den här enheten</label>
+    <div class="row"><button class="btn primary" type="submit">Logga in</button><span class="muted small" id="loginStatus"></span></div>
+    <p class="muted small">Lånar du någon annans mobil: bocka ur ”Kom ihåg mig”. Då glöms nyckeln när fliken stängs.</p>
+  </form>`;
+}
+function accountHTML() {
+  if (!gh.token) return loginFormHTML(false) || `<div class="panel"><h2>Konto</h2><p class="muted small">Ingen nyckel är sparad på kontot än. Lägg in nyckeln under ”Avancerat” nedan, och spara den sedan på kontot med ett lösenord.</p></div>`;
+  const has = !!S.auth;
+  return `<div class="panel">
+    <h2>Konto</h2>
+    <p>Inloggad på den här enheten${gh.owner ? ` som <b>${esc(gh.owner)}</b>` : ''}${tokenStore.remembered() ? '' : ', tills fliken stängs'}.</p>
+    ${has ? `<p class="muted small">Nyckeln är sparad på kontot (${when(S.auth.savedAt)}). På en annan mobil eller dator öppnar du appen och loggar in med ditt lösenord.</p>`
+      : `<div class="note warn small">Nyckeln finns bara på den här enheten. Spara den på kontot med ett lösenord, så kan du logga in var som helst.</div>`}
+    <form id="sealForm" class="form-grid">
+      <div class="field"><label for="pw1">${has ? 'Nytt lösenord' : 'Välj lösenord'}</label><input id="pw1" type="password" autocomplete="new-password" minlength="10" required></div>
+      <div class="field"><label for="pw2">Upprepa lösenordet</label><input id="pw2" type="password" autocomplete="new-password" minlength="10" required></div>
+      <button class="btn ${has ? '' : 'primary'}" type="submit">${has ? 'Byt lösenord' : 'Spara nyckeln på kontot'}</button>
+    </form>
+    <p class="muted small">Minst 10 tecken, gärna en hel mening. Repot är publikt, så det är lösenordet som skyddar nyckeln. Nyckeln når bara det här repot och kan stängas av på GitHub när som helst.</p>
+    <div class="row"><button class="btn danger" type="button" id="logout">Logga ut från den här enheten</button></div>
+  </div>`;
+}
+
 // ---------- vy: Inställningar ----------
 function renderSettings() {
   const el = $('#v-installningar'); const c = S.cfg;
   const terms = [...S.terms.values()].sort((a, b) => a.cat.localeCompare(b.cat, 'sv') || a.q.localeCompare(b.q, 'sv'));
   const tokenUrl = `https://github.com/settings/personal-access-tokens/new?name=Thriftkollen%20mobil&description=Skicka%20foton%20fr%C3%A5n%20appen&contents=write&actions=write`;
   el.innerHTML = `
-    <form class="panel" id="ghForm">
-      <h2>GitHub-anslutning</h2>
-      <p class="muted small">Nyckeln behövs för att skicka foton, ändra sökord och starta scrapes. Den sparas bara på den här enheten.</p>
+    ${accountHTML()}
+    <details class="panel"><summary><b>Avancerat: lägg in nyckel manuellt</b></summary>
+    <form id="ghForm" style="display:grid;gap:14px;margin-top:14px">
+      <p class="muted small">Behövs bara första gången, eller om du skapar en ny nyckel. Spara den sedan på kontot ovan.</p>
       <ol class="steps small">
         <li>Öppna <a href="${tokenUrl}" target="_blank" rel="noopener">Ny nyckel på GitHub ↗</a>.</li>
         <li>Under <b>Repository access</b>: välj <b>Only select repositories</b> och <b>${esc(gh.repo || 'thriftkollen')}</b>.</li>
@@ -728,10 +815,10 @@ function renderSettings() {
       <div class="form-grid">
         <div class="field"><label for="g-owner">GitHub-användare</label><input id="g-owner" type="text" value="${esc(gh.owner)}" autocapitalize="off"></div>
         <div class="field"><label for="g-repo">Repo</label><input id="g-repo" type="text" value="${esc(gh.repo)}" autocapitalize="off"></div>
-        <div class="field" style="grid-column:1/-1"><label for="g-token">Nyckel</label><input id="g-token" type="password" value="${esc(gh.token)}" autocomplete="off" placeholder="github_pat_…"></div>
+        <div class="field" style="grid-column:1/-1"><label for="g-token">Nyckel</label><input id="g-token" type="password" value="" autocomplete="off" placeholder="${gh.token ? 'En nyckel finns redan på enheten' : 'github_pat_…'}"></div>
       </div>
       <div class="row"><button class="btn primary" type="submit">Spara och testa</button><span class="muted small" id="ghStatus"></span></div>
-    </form>
+    </form></details>
     <div class="panel">
       <h2>Full scrape</h2>
       <p class="muted small">Körs automatiskt måndag och torsdag kl 06. Starta en extra körning här. Den tar 6–10 minuter på GitHub.${S.meta && S.meta.generatedAt ? ` Senast: ${when(S.meta.generatedAt)}.` : ''}</p>
@@ -792,7 +879,7 @@ function render() {
   st.textContent = S.state === 'loading' ? 'Laddar…' : S.state === 'error' ? 'Kunde inte läsa data' : `${S.terms.size} sökord${S.meta && S.meta.generatedAt ? ' · data ' + when(S.meta.generatedAt) : ''}`;
   const dot = $('#pendingDot'); dot.hidden = !S.pending.length; dot.textContent = S.pending.length;
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === S.tab ? 'page' : 'false'));
-  document.querySelectorAll('section[data-view]').forEach(s => s.hidden = s.dataset.view !== S.tab);
+  document.querySelectorAll('section[data-view]').forEach(s => { s.hidden = s.dataset.view !== S.tab; if (s.hidden) s.innerHTML = ''; });
   const active = document.activeElement && document.activeElement.id;
   ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, statistik: renderStats, installningar: renderSettings })[S.tab]();
   renderSheet();
@@ -803,14 +890,14 @@ function render() {
 let qTimer;
 $('#q').addEventListener('input', e => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.q = e.target.value.trim(); if (S.tab !== 'fynd') location.hash = 'fynd'; else render(); }, 150); });
 $('#price').addEventListener('input', e => { const v = e.target.value === '' ? null : Math.max(0, +e.target.value); S.price = isFinite(v) ? v : null; render(); });
-$('#photoInput').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; onPhotoChosen(f); });
-$('#photoPick').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; onPhotoChosen(f); });
+$('#photoInput').addEventListener('change', e => { const fs = [...e.target.files]; e.target.value = ''; onPhotosChosen(fs); });
+$('#photoPick').addEventListener('change', e => { const fs = [...e.target.files]; e.target.value = ''; onPhotosChosen(fs); });
 $('#invImport').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try { const d = JSON.parse(await f.text()); if (!Array.isArray(d)) throw 0; S.inv = d; saveInv(); render(); toast(`Läste in ${d.length} saker.`); } catch { toast('Det där är ingen lagerkopia.'); }
 });
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],[data-retry],#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
+  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],[data-retry],[data-premove],#logout,#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
   if (!t) return;
   if (t.dataset.retry) {
     const f = S.fynd.find(x => x.id === t.dataset.retry); if (!f) return;
@@ -827,7 +914,9 @@ document.addEventListener('click', async e => {
   if (t.dataset.open) { S.open = t.dataset.open; renderSheet(); return; }
   if (t.dataset.photo === 'camera') { $('#photoInput').click(); return; }
   if (t.dataset.photo === 'pick') { $('#photoPick').click(); return; }
-  if (t.dataset.photo === 'clear') { S.photo = null; render(); return; }
+  if (t.dataset.photo === 'clear') { S.photos = []; render(); return; }
+  if (t.dataset.premove != null) { S.photos.splice(+t.dataset.premove, 1); render(); return; }
+  if (t.id === 'logout') { tokenStore.set('', false); gh.token = ''; S.run = null; render(); toast('Utloggad från den här enheten.'); return; }
   if (t.dataset.buy != null) {
     const name = t.dataset.buy, price = t.dataset.buyprice ? S.fyndPrice[t.dataset.buyprice] : S.price;
     S.open = null; location.hash = 'lager'; S.tab = 'lager'; render();
@@ -874,12 +963,13 @@ let sTimer;
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'sheetPrice') { S.price = el.value === '' ? null : +el.value; $('#price').value = el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { render(); const sp = $('#sheetPrice'); if (sp) sp.focus(); }, 300); }
+  if (el.dataset.ptext != null) { const p = S.photos[+el.dataset.ptext]; if (p) p.text = el.value; }
   if (el.dataset.fprice) { const id = el.dataset.fprice; S.fyndPrice[id] = el.value === '' ? null : +el.value; clearTimeout(sTimer); sTimer = setTimeout(() => { render(); const f = document.getElementById('fp-' + id); if (f) { f.focus(); } }, 400); }
 });
 document.addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
-  if (f.id === 'photoForm') { sendPhoto(); return; }
+  if (f.id === 'photoForm') { sendPhotos(); return; }
   if (f.id === 'invForm') {
     const name = $('#invName').value.trim(), buy = +$('#invBuy').value;
     if (!name || !isFinite(buy)) return;
@@ -894,8 +984,9 @@ document.addEventListener('submit', async e => {
     store.set('tk-settings', S.cfg); render(); toast('Reglerna är sparade'); return;
   }
   if (f.id === 'ghForm') {
-    gh.owner = $('#g-owner').value.trim(); gh.repo = $('#g-repo').value.trim(); gh.token = $('#g-token').value.trim();
-    store.set('tk-github', { owner: gh.owner, repo: gh.repo, token: gh.token });
+    gh.owner = $('#g-owner').value.trim(); gh.repo = $('#g-repo').value.trim();
+    const newToken = $('#g-token').value.trim(); if (newToken) { gh.token = newToken; tokenStore.set(newToken, true); }
+    store.set('tk-github', { owner: gh.owner, repo: gh.repo });
     const st = $('#ghStatus'); st.textContent = 'Testar…';
     try {
       const r = await api(repoPath(''));
@@ -903,6 +994,29 @@ document.addEventListener('submit', async e => {
       st.textContent = ok ? 'Ansluten. Nyckeln kan skicka foton.' : 'Ansluten, men nyckeln saknar skrivrätt.';
       render(); $('#ghStatus').textContent = st.textContent; loadData(true);
     } catch (err) { st.textContent = err.status === 401 ? 'Nyckeln godtogs inte.' : err.status === 404 ? 'Hittar inte repot (eller nyckeln har inte tillgång till det).' : 'Fel: ' + err.message; }
+    return;
+  }
+  if (f.id === 'loginForm') {
+    const st = $('#loginStatus'), pw = $('#loginPw').value, remember = $('#remember').checked;
+    if (!S.auth) { st.textContent = 'Ingen nyckel är sparad på kontot.'; return; }
+    st.textContent = 'Låser upp…';
+    let token;
+    try { token = await openToken(S.auth, pw); } catch { st.textContent = 'Fel lösenord.'; $('#loginPw').select(); return; }
+    gh.token = token; tokenStore.set(token, remember); S.borrowed = !remember;
+    try { await api(repoPath('')); } catch (err) { st.textContent = err.status === 401 ? 'Lösenordet stämmer, men nyckeln har slutat gälla. Skapa en ny under Avancerat.' : 'Fel: ' + err.message; gh.token = ''; tokenStore.set('', false); return; }
+    render(); toast(remember ? 'Inloggad.' : 'Inloggad tills fliken stängs.'); loadData(true); return;
+  }
+  if (f.id === 'sealForm') {
+    const p1 = $('#pw1').value, p2 = $('#pw2').value;
+    if (p1.length < 10) { toast('Lösenordet behöver minst 10 tecken.'); return; }
+    if (p1 !== p2) { toast('Lösenorden är inte lika.'); return; }
+    try {
+      const blob = await sealToken(gh.token, p1);
+      if (await openToken(blob, p1) !== gh.token) throw new Error('Kontrollen misslyckades.');
+      let sha; try { sha = (await api(repoPath('/contents/' + AUTH_PATH + '?ref=' + gh.branch))).sha; } catch {}
+      await putFile(AUTH_PATH, b64(JSON.stringify(blob, null, 1)), 'Spara krypterad nyckel på kontot', sha);
+      S.auth = blob; render(); toast('Nyckeln är sparad på kontot. Logga in med lösenordet på andra enheter.');
+    } catch (err) { toast('Kunde inte spara: ' + err.message); }
     return;
   }
   if (f.id === 'termForm') {
@@ -927,6 +1041,7 @@ $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.target.blu
 setMenu(store.get('tk-menu', false));
 route();
 loadData(true).then(schedulePoll);
+loadAuth();
 })();
 </script>
 </body>
