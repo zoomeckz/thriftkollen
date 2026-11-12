@@ -424,16 +424,16 @@ function render(first) {
 // ---------- trädkarta (squarify) ----------
 function squarify(items, x, y, w, h) {
   const out = [], total = items.reduce((s, it) => s + it.v, 0); if (!total) return out;
-  const scale = w * h / total; let rest = items.map(it => ({ ...it, a: it.v * scale }));
+  const scale = w * h / total; let rest = items.map(it => ({ ...it, area: it.v * scale }));
   while (rest.length) {
     const short = Math.min(w, h); let row = [], best = Infinity;
     for (const it of rest) {
-      const r = row.concat([it]), s = r.reduce((a, b) => a + b.a, 0), mx = Math.max(...r.map(z => z.a)), mn = Math.min(...r.map(z => z.a));
+      const r = row.concat([it]), s = r.reduce((a, b) => a + b.area, 0), mx = Math.max(...r.map(z => z.area)), mn = Math.min(...r.map(z => z.area));
       const worst = Math.max(short * short * mx / (s * s), (s * s) / (short * short * mn));
       if (worst > best) break; best = worst; row = r;
     }
-    const s = row.reduce((a, b) => a + b.a, 0), thick = s / short; let off = 0;
-    for (const it of row) { const len = it.a / thick; out.push(w >= h ? { ...it, x, y: y + off, w: thick, h: len } : { ...it, x: x + off, y, w: len, h: thick }); off += len; }
+    const s = row.reduce((a, b) => a + b.area, 0), thick = s / short; let off = 0;
+    for (const it of row) { const len = it.area / thick; out.push(w >= h ? { ...it, x, y: y + off, w: thick, h: len } : { ...it, x: x + off, y, w: len, h: thick }); off += len; }
     if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
     rest = rest.slice(row.length);
   }
