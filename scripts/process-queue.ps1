@@ -11,6 +11,27 @@ $queueDir = Join-Path $RepoRoot 'queue'
 $jobs = @(Get-ChildItem -Path $queueDir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)
 if (-not $jobs.Count) { Write-Host 'Inga foton i kön.'; return }
 
+# Skickar ett anrop till Claude. Vid fel kastas API:ets eget felmeddelande, så att det syns i appen.
+function Send-Claude($req, $headers) {
+  $json = $req | ConvertTo-Json -Depth 20 -Compress
+  try {
+    $resp = Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'https://api.anthropic.com/v1/messages' -Headers $headers `
+      -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 180
+  } catch [System.Net.WebException] {
+    $status = ''; $body = ''
+    if ($_.Exception.Response) {
+      $status = [int]$_.Exception.Response.StatusCode
+      $sr = New-Object IO.StreamReader($_.Exception.Response.GetResponseStream(), [Text.Encoding]::UTF8)
+      $body = $sr.ReadToEnd()
+    }
+    $msg = $body
+    try { $m = ($body | ConvertFrom-Json).error.message; if ($m) { $msg = $m } } catch {}
+    if (-not $msg) { $msg = $_.Exception.Message }
+    throw "Claude API $status`: $msg"
+  }
+  return ([Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray()) | ConvertFrom-Json)
+}
+
 function Invoke-Identify([string]$imagePath, [string]$text, [string]$catHint) {
   $key = $env:ANTHROPIC_API_KEY
   if (-not $key) { return $null }
@@ -44,7 +65,7 @@ Fält:
       confidence = @{ type = 'string'; enum = @('low', 'medium', 'high') }
     }
   }
-  $body = [ordered]@{
+  $req = [ordered]@{
     model = 'claude-opus-5-5'
     max_tokens = 8000
     fallbacks = 'default'
@@ -53,11 +74,17 @@ Fält:
       [ordered]@{ type = 'image'; source = [ordered]@{ type = 'base64'; media_type = 'image/jpeg'; data = $b64 } },
       [ordered]@{ type = 'text'; text = $prompt }
     ) })
-  } | ConvertTo-Json -Depth 20 -Compress
+  }
   $headers = @{ 'x-api-key' = $key; 'anthropic-version' = '2026-10-21'; 'anthropic-beta' = 'server-side-fallback-2026-07-01' }
-  $resp = Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'https://api.anthropic.com/v1/messages' -Headers $headers `
-    -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 180
-  $r = [Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray()) | ConvertFrom-Json
+  try { $r = Send-Claude $req $headers }
+  catch {
+    $err = $_.Exception.Message
+    if ($err -notmatch '(?i)fallback|beta') { throw }
+    # Om reservmodell-funktionen inte godtas: försök en gång till utan den.
+    Write-Host "   Försöker igen utan reservmodell: $err" -ForegroundColor Yellow
+    $req.Remove('fallbacks'); $headers.Remove('anthropic-beta')
+    $r = Send-Claude $req $headers
+  }
   if ($r.stop_reason -eq 'refusal') { throw 'Claude avböjde att identifiera bilden.' }
   $txt = ($r.content | Where-Object { $_.type -eq 'text' } | Select-Object -First 1).text
   if (-not $txt) { throw "Tomt svar från Claude (stop_reason: $($r.stop_reason))." }

@@ -315,7 +315,7 @@ async function dispatchScrape() {
   await api(repoPath('/actions/workflows/scrape.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { full: true } } });
 }
 async function latestRun() {
-  try { const r = await api(repoPath('/actions/runs?per_page=1')); return r.workflow_runs && r.workflow_runs[0]; } catch { return null; }
+  try { const r = await api(repoPath('/actions/workflows/scrape.yml/runs?per_page=1')); return r.workflow_runs && r.workflow_runs[0]; } catch { return null; }
 }
 
 // ---------- data ----------
@@ -324,9 +324,9 @@ async function loadData(quiet) {
     const [td, fy] = await Promise.all([readRepoJson('data/thriftdata.json'), readRepoJson('data/fynd.json')]);
     if (td) { S.terms = new Map((td.terms || []).map(t => [t.id, t])); S.meta = { generatedAt: td.generatedAt }; }
     S.fynd = (fy && fy.items) || [];
-    const done = new Set(S.fynd.map(f => f.id));
+    const doneAt = new Map(S.fynd.map(f => [f.id, f.processedAt || '']));
     const before = S.pending.length;
-    S.pending = S.pending.filter(p => !done.has(p.id) && daysAgo(p.createdAt) < 1);
+    S.pending = S.pending.filter(p => !(doneAt.has(p.id) && doneAt.get(p.id) >= p.createdAt) && daysAgo(p.createdAt) < 1);
     if (S.pending.length !== before) { store.set('tk-pending', S.pending); if (!quiet || before > S.pending.length) toast('Fotot är scrapat. Resultatet ligger under Fota.'); }
     S.state = 'ready'; S.loadErr = null;
   } catch (e) { S.loadErr = e.message; if (S.state === 'loading') S.state = 'error'; }
@@ -532,8 +532,10 @@ function cmpHTML(f, kind, t, title) {
 function fyndHTML(f) {
   const ai = f.ai || {};
   const photo = f.photo ? imgTag(rawUrl(f.photo), 'photo') : '';
+  const busy = S.pending.some(p => p.id === f.id);
+  const retry = f.photo && gh.token ? `<button class="btn small" data-retry="${esc(f.id)}" ${busy ? 'disabled' : ''}>${busy ? 'Körs om…' : 'Kör om'}</button>` : '';
   if (f.status === 'fel') return `<div class="panel"><div class="shot">${photo}<div class="fynd"><h3>${esc(f.text || 'Foto')}</h3><div class="note bad">${esc(f.message || 'Något gick fel.')}</div>
-    <div class="muted small">${when(f.processedAt)}</div></div></div></div>`;
+    <div class="row muted small">${when(f.processedAt)} ${retry}</div></div></div></div>`;
   const conf = { low: 'osäker', medium: 'ganska säker', high: 'säker' }[ai.confidence] || '';
   return `<div class="panel"><div class="shot">${photo}<div class="fynd">
       <div><div class="lbl">${esc(ai.category || '')} · ${when(f.processedAt)}</div><h3 style="font-size:1.25rem">${esc(ai.name || f.text)}</h3>
@@ -543,7 +545,7 @@ function fyndHTML(f) {
       <div class="field" style="max-width:11rem"><label for="fp-${esc(f.id)}">Pris i butiken</label><input id="fp-${esc(f.id)}" data-fprice="${esc(f.id)}" type="number" inputmode="numeric" min="0" step="5" value="${S.fyndPrice[f.id] ?? ''}" placeholder="kr"></div>
     </div></div>
     <div class="compare">${cmpHTML(f, 's', f.specific, 'Samma märke/modell')}${cmpHTML(f, 'g', f.generic, 'Varutypen i stort')}</div>
-    <div class="row"><button class="btn small" data-buy="${esc(ai.name || f.text || '')}" data-buyprice="${esc(f.id)}">Köpt! Lägg i lager</button>${searchLinks(ai.specificQuery || f.text || '')}</div>
+    <div class="row"><button class="btn small" data-buy="${esc(ai.name || f.text || '')}" data-buyprice="${esc(f.id)}">Köpt! Lägg i lager</button>${retry}${searchLinks(ai.specificQuery || f.text || '')}</div>
   </div>`;
 }
 function renderFoto() {
@@ -773,8 +775,18 @@ $('#invImport').addEventListener('change', async e => {
   try { const d = JSON.parse(await f.text()); if (!Array.isArray(d)) throw 0; S.inv = d; saveInv(); render(); toast(`Läste in ${d.length} saker.`); } catch { toast('Det där är ingen lagerkopia.'); }
 });
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
+  const t = e.target.closest('[data-cat],[data-open],[data-close],[data-buy],[data-delinv],[data-delterm],[data-photo],[data-retry],#runScrape,#reload,#cfgReset,#invExport,#invImportBtn');
   if (!t) return;
+  if (t.dataset.retry) {
+    const f = S.fynd.find(x => x.id === t.dataset.retry); if (!f) return;
+    const job = { id: f.id, createdAt: new Date().toISOString(), text: f.text || '', cat: '', image: f.photo };
+    try {
+      await putFile(`queue/${f.id}-r${Date.now().toString(36)}.json`, b64(JSON.stringify(job)), `Kör om foto ${f.id}`);
+      S.pending.unshift({ id: f.id, createdAt: job.createdAt, text: f.text || (f.ai && f.ai.name) || 'Foto', thumb: rawUrl(f.photo) });
+      store.set('tk-pending', S.pending); render(); schedulePoll(); toast('Körs om på GitHub.');
+    } catch (err) { toast('Kunde inte köra om: ' + err.message); }
+    return;
+  }
   if (t.dataset.close && (e.target === t || t.tagName === 'BUTTON')) { S.open = null; renderSheet(); return; }
   if (t.dataset.cat) { S.cat = t.dataset.cat; store.set('tk-cat', S.cat); render(); return; }
   if (t.dataset.open) { S.open = t.dataset.open; renderSheet(); return; }
