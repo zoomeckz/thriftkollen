@@ -221,6 +221,20 @@ details.panel[open] > summary::after { content: " ▴"; }
   .shot img.photo { width: 84px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* Flippa */
+.flips { display: grid; gap: 10px; }
+.flip { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+.flip.open { border-color: var(--muted); }
+.flip-head { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 14px 16px; cursor: pointer; }
+.flip-head:focus-visible { outline: 2px solid var(--accent); border-radius: var(--r); }
+.flip-main { display: grid; gap: 5px; min-width: 0; }
+.flip-name { font-weight: 700; font-size: 1.05rem; text-transform: capitalize; overflow-wrap: anywhere; }
+.flip-profit { font-weight: 800; font-size: 1.1rem; white-space: nowrap; color: var(--muted); }
+.flip-profit.buy { color: var(--good); } .flip-profit.maybe { color: var(--warn); }
+.flip-body { display: grid; gap: 12px; padding: 0 16px 16px; min-width: 0; }
+.flip-body .table { font-size: .8rem; } .flip-body .table th, .flip-body .table td { padding: 6px 4px; white-space: nowrap; }
+.flip-body .chart svg { min-width: 0; }
+.listing .ph { aspect-ratio: 1; background: var(--surface-2); border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -252,6 +266,7 @@ details.panel[open] > summary::after { content: " ▴"; }
         <a href="#fynd" data-tab="fynd">Katalog</a>
         <a href="#foto" data-tab="foto">Fota<span class="dot" id="pendingDot" hidden></span></a>
         <a href="#lager" data-tab="lager">Lager</a>
+        <a href="#flippa" data-tab="flippa">Flippa</a>
         <a href="#databas" data-tab="databas">Databas</a>
         <a href="#statistik" data-tab="statistik">Statistik</a>
         <a href="#installningar" data-tab="installningar">Inställningar</a>
@@ -267,6 +282,7 @@ details.panel[open] > summary::after { content: " ▴"; }
   <section data-view="foto" id="v-foto" hidden></section>
   <section data-view="lager" id="v-lager" hidden></section>
   <section data-view="statistik" id="v-statistik" hidden></section>
+  <section data-view="flippa" id="v-flippa" hidden></section>
   <section data-view="databas" id="v-databas" hidden></section>
   <section data-view="installningar" id="v-installningar" hidden></section>
 </main>
@@ -282,7 +298,7 @@ details.panel[open] > summary::after { content: " ▴"; }
 const CATS = ['Möbler & stolar', 'Porslin & glas', 'Elektronik & retro', 'Kläder & märken', 'Barn & fritid', 'Övrigt'];
 const DEFAULT_CFG = { minProfit: 100, minMult: 2, mode: 'any', valuation: 'bal', platform: 'tradera',
   traderaPct: 10, traderaMin: 3, traderaCap: 200, blocketFee: 0, haggle: 20 };
-const TABS = ['fynd', 'foto', 'lager', 'databas', 'statistik', 'installningar'];
+const TABS = ['fynd', 'foto', 'lager', 'flippa', 'databas', 'statistik', 'installningar'];
 
 // ---------- lagring på enheten ----------
 const store = {
@@ -774,6 +790,161 @@ function renderStats() {
       ${gap.map(x => `<tr data-open="${esc(x.t.id)}" style="cursor:pointer"><td style="text-transform:capitalize">${esc(x.t.q)}</td><td class="r">${kr(x.v.tv)}</td><td class="r">${kr(x.t.blocket.stats.med)}</td><td class="r">x${x.ratio.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 }
 
+// ---------- vy: Flippa (gemensam databas för Blocket + Tradera) ----------
+// Läser kombo/flip.json från grenen db (byggs varje natt av scripts/kombo.ps1).
+// Ett "ord" är en varutyp ur rubrikerna, t.ex. "vinteroverall" eller "maxi cosi". Pålitliga ord (conf > 0) har samlade priser:
+// conf 3 = Tradera (sålda) och Blocket är överens, 2 = Blocket med sålda (försvunna) annonser, 1 = bara utropspriser på Blocket.
+const CONF = { 3: ['Säker', 'fast', 'Tradera-sålda och Blocket är överens'], 2: ['Blocket-sålda', 'mid', 'Bygger på annonser som sålts på Blocket'], 1: ['Bara utropspris', 'slow', 'Bara vad folk begär på Blocket, osäkert'], 0: ['Spretigt', 'slow', 'Priserna spretar, olika saker under samma ord'] };
+const FS = { data: null, loading: false, err: null, mode: store.get('tk-flipmode', 'typer'), max: store.get('tk-flipmax', 300), all: store.get('tk-flipall', false),
+  q: '', open: null, limit: 40, terms: null, termsLoading: false, shards: new Map() };
+const fnv = s => { let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; };
+const rowObj = (cols, r) => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; };
+async function loadFlip(force) {
+  if ((FS.data || FS.loading) && !force) return;
+  FS.loading = true; FS.err = null;
+  try {
+    const d = await readDbFile('kombo/flip.json');
+    if (d) { d._terms = d.terms.map(r => rowObj(d.cols, r)); d._byK = new Map(d._terms.map(t => [t.k, t])); d._deals = d.deals.map(r => rowObj(d.dealCols, r)); }
+    FS.data = d;
+  } catch (e) { FS.err = e.message; }
+  FS.loading = false; render();
+}
+async function loadAllTerms() {
+  if (FS.terms || FS.termsLoading) return;
+  FS.termsLoading = true;
+  try { const d = await readDbFile('kombo/terms.json'); FS.terms = d ? d.rows.map(r => rowObj(d.cols, r)) : []; } catch { FS.terms = []; }
+  FS.termsLoading = false; render();
+}
+async function loadTrend(k) {
+  const n = String(fnv(k) % 32).padStart(2, '0');
+  if (FS.shards.has(n)) return;
+  FS.shards.set(n, null);
+  try { FS.shards.set(n, await readDbFile(`kombo/trend/${n}.json`)); } catch { FS.shards.set(n, { terms: {} }); }
+  render();
+}
+// Värdering med appens egna inställningar (värdering, prutmån, avgifter, vinstregel).
+function flipVal(t, buyPrice) {
+  const tv = t.conf === 3 ? t.t50 : null;
+  const bv = (t.gN >= 8 ? t.g50 : t.b50) * (1 - S.cfg.haggle / 100);
+  const vals = [tv, bv].filter(v => v != null && v > 0);
+  if (!vals.length) return null;
+  const resale = S.cfg.valuation === 'safe' ? (tv ?? bv) : S.cfg.valuation === 'opt' ? Math.max(...vals) : vals.reduce((a, b) => a + b, 0) / vals.length;
+  const platform = tv != null ? S.cfg.platform : 'blocket';   // skrymmande saker som inte går på Tradera säljs på Blocket
+  const net = resale - fee(platform, resale);
+  const buy = buyPrice ?? (S.price != null ? S.price : t.b25);
+  const vd = verdict({ net, max: maxBuy(net) }, buy);
+  const liq = (t.tW || 0) * 4 + (t.gN || 0) + (t.bN || 0) / 4;
+  const w = { 3: 1, 2: .8, 1: .4, 0: .1 }[t.conf] || 0;
+  return { resale, net, buy, platform, vd, max: maxBuy(net), score: vd ? w * vd.profit * Math.log(2 + liq) : 0 };
+}
+const confPill = c => `<span class="pill ${CONF[c][1]}" title="${esc(CONF[c][2])}">${CONF[c][0]}</span>`;
+const fdays = d => d == null ? '–' : d < 1 ? 'samma dag' : `${Math.round(d)} d`;
+function flipCard(t) {
+  const v = flipVal(t); if (!v) return '';
+  const open = FS.open === t.k;
+  const pills = [confPill(t.conf),
+    t.tW ? `<span class="pill">${t.tW} sålda/v Tradera</span>` : '',
+    t.gN ? `<span class="pill">${t.gN} sålda/30 d Blocket${t.s50 != null && t.gN >= 5 ? ' · ' + fdays(t.s50) : ''}</span>` : '',
+    `<span class="pill">${t.bN} ute på Blocket</span>`].join('');
+  return `<div class="flip${open ? ' open' : ''}">
+    <button class="flip-head" data-flipopen="${esc(t.k)}" aria-expanded="${open}">
+      <div class="flip-main"><div class="flip-name">${esc(t.k)}</div>
+        <div class="muted small num">Köp ${S.price != null ? 'för' : 'från ~'}${kr(v.buy)} · säljs ~${kr(v.resale)}${v.vd && isFinite(v.vd.mult) ? ' · x' + v.vd.mult.toFixed(1) : ''}</div>
+        <div class="meta">${pills}</div></div>
+      <div class="flip-profit ${v.vd ? v.vd.cls : ''} num">${v.vd ? (v.vd.profit >= 0 ? '+' : '') + kr(v.vd.profit) : '–'}</div>
+    </button>
+    ${open ? flipDetail(t, v) : ''}</div>`;
+}
+function flipDetail(t, v) {
+  loadTrend(t.k);
+  const shard = FS.shards.get(String(fnv(t.k) % 32).padStart(2, '0'));
+  const series = shard && shard.terms && shard.terms[t.k];
+  const deals = FS.data ? FS.data._deals.filter(d => d.k === t.k).slice(0, 8) : [];
+  const row = (lab, n, a, b, c, d) => `<tr><td>${lab}</td><td class="r">${n}</td><td class="r">${a}</td><td class="r">${b}</td><td class="r">${c}</td><td class="r">${d}</td></tr>`;
+  return `<div class="flip-body">
+    <div class="spread"><div>${tagHTML({ max: v.max }, false)}</div><div class="muted small">Säljs på ${v.platform === 'tradera' ? 'Tradera' : 'Blocket'} · regel: ${ruleText()}</div></div>
+    <div class="scroll-x"><table class="table small"><thead><tr><th></th><th class="r">Antal</th><th class="r">Låg</th><th class="r">Median</th><th class="r">Hög</th><th class="r">Fart</th></tr></thead><tbody>
+      ${row('<span class="src b">Blocket</span><br>ute nu', t.bN, kr(t.b25), kr(t.b50), kr(t.b75), '')}
+      ${t.gN ? row('<span class="src b">Blocket</span><br>sålda 30 d', t.gN, '', kr(t.g50), '', fdays(t.s50)) : ''}
+      ${t.tN ? row('<span class="src t">Tradera</span><br>sålda 30 d', t.tN, kr(t.t25), kr(t.t50), kr(t.t75), `${t.tW}/v`) : ''}
+    </tbody></table></div>
+    ${trendChart(series)}
+    ${deals.length ? `<div class="lbl">Billiga just nu på Blocket</div><div class="listings">${deals.map(dealTile).join('')}</div>` : ''}
+    <div class="row">${searchLinks(t.k)}</div></div>`;
+}
+function trendChart(s) {
+  if (!s) return `<div class="muted small">Laddar trend…</div>`;
+  if (s.length < 2) return `<div class="muted small">Trenden fylls på varje natt. ${s.length ? 'En dag hittills.' : ''}</div>`;
+  const W = 520, H = 140, P = 30, days = s.map(r => r[0]), d0 = Math.min(...days), d1 = Math.max(...days);
+  const prices = s.flatMap(r => [r[2], r[6]]).filter(x => x > 0), pMax = Math.max(1, ...prices) * 1.1;
+  const x = d => P + (d - d0) / Math.max(1, d1 - d0) * (W - P - 8), y = p => H - 18 - p / pMax * (H - 30);
+  const line = (i, col) => { const pts = s.filter(r => r[i] > 0).map(r => `${x(r[0]).toFixed(1)},${y(r[i]).toFixed(1)}`); return pts.length > 1 ? `<polyline fill="none" stroke="${col}" stroke-width="2" points="${pts.join(' ')}"/>` : ''; };
+  const date = d => new Date(d * 864e5).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Medianpris över tid">
+    <text x="${P}" y="12">${kr(pMax / 1.1)}</text><text x="${P}" y="${H - 2}">${date(d0)}</text><text x="${W - 8}" y="${H - 2}" text-anchor="end">${date(d1)}</text>
+    ${line(2, 'var(--blocket)')}${line(6, 'var(--tradera)')}${line(4, 'var(--good)')}</svg></div>
+    <div class="muted small"><span style="color:var(--blocket)">■</span> Blocket utropspris · <span style="color:var(--good)">■</span> Blocket sålda · <span style="color:var(--tradera)">■</span> Tradera sålda (median per dag)</div>`;
+}
+function dealTile(d) {
+  const t = FS.data._byK.get(d.k), v = t && flipVal(t, d.p);
+  const age = FS.data.day - d.pubDay;
+  return `<a class="listing" href="${esc(FS.data.urlBase + d.id)}" target="_blank" rel="noopener">${d.img ? imgTag(esc(d.img)) : '<div class="ph"></div>'}
+    <div class="p"><span class="num">${kr(d.p)}</span>${v && v.vd ? `<span class="num" style="color:var(--good)">+${kr(v.vd.profit)}</span>` : ''}</div>
+    <div class="t">${esc(d.t)}</div><div class="muted">${esc(d.loc)}${d.km >= 0 ? ' · ' + d.km + ' km' : ''} · ${age <= 0 ? 'i dag' : age + ' d'}</div></a>`;
+}
+function renderFlip() {
+  const el = $('#v-flippa');
+  if (!FS.data && !FS.loading && !FS.err) loadFlip();
+  const d = FS.data;
+  const modes = [['typer', 'Varutyper'], ['annonser', 'Billigt på Blocket'], ['sok', 'Sök allt']];
+  const head = `<div class="panel"><div class="spread"><div><div class="lbl">Blocket + Tradera${d ? ' · uppdaterad ' + when(d.updatedAt) : ''}</div><h2>Flippa</h2></div>
+      ${d && d.total && d.total.length ? (() => { const r = d.total[d.total.length - 1]; return `<div class="muted small num">${r[1].toLocaleString('sv-SE')} annonser på Blocket · ${r[2].toLocaleString('sv-SE')} sålda på Tradera (30 d)</div>`; })() : ''}</div>
+    <div class="chips" role="group" aria-label="Visa">${modes.map(([k, l]) => `<button class="chip" data-flipmode="${k}" aria-pressed="${FS.mode === k}">${l}</button>`).join('')}</div>
+    <div class="quick">
+      <div class="field"><label for="flipQ">Filtrera</label><input id="flipQ" data-flipq="1" type="search" placeholder="t.ex. värmeelement, babolat" value="${esc(FS.q)}" autocomplete="off"></div>
+      <div class="field"><label for="flipMax">Max inköp</label><input id="flipMax" data-flipmax="1" type="number" inputmode="numeric" min="0" step="50" value="${FS.max ?? ''}" placeholder="kr"></div>
+    </div>
+    ${FS.mode !== 'sok' ? `<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-flipall="1" ${FS.all ? 'checked' : ''}> Visa även osäkra (bara utropspriser på Blocket)</label>` : ''}
+    <div class="muted small">${S.price != null ? `Räknar med att du köper för ${kr(S.price)} (Pris i butiken).` : 'Köppris = billigaste fjärdedelen på Blocket. Skriv ett pris under ”Pris i butiken” för att räkna med det.'} Regel: ${ruleText()}.</div></div>`;
+  if (FS.loading && !d) { el.innerHTML = head + `<div class="note">Laddar…</div>`; return; }
+  if (FS.err) { el.innerHTML = head + `<div class="note bad">Kunde inte läsa flipp-datan: ${esc(FS.err)}</div>`; return; }
+  if (!d) { el.innerHTML = head + `<div class="note">Ingen gemensam databas än. Den byggs i nattens körning (Databas → Kör nu).</div>`; return; }
+  const qn = norm(FS.q), max = FS.max ? +FS.max : null;
+  const hit = k => !qn || norm(k).includes(qn);
+  let body = '';
+  if (FS.mode === 'annonser') {
+    const list = d._deals.filter(x => (!max || x.p <= max) && (hit(x.k) || norm(x.t).includes(qn)))
+      .map(x => { const t = d._byK.get(x.k), v = t && (FS.all || t.conf >= 2) && flipVal(t, x.p); return { x, v }; }).filter(o => o.v && o.v.vd && o.v.vd.cls === 'buy')
+      .sort((a, b) => b.v.vd.profit - a.v.vd.profit);
+    body = list.length ? `<div class="listings">${list.slice(0, FS.limit).map(o => dealTile(o.x)).join('')}</div>${list.length > FS.limit ? `<button class="btn" data-flipmore="1">Visa fler (${list.length - FS.limit})</button>` : ''}`
+      : `<div class="note">Inga annonser under ${max ? kr(max) : 'gränsen'} som klarar regeln just nu.</div>`;
+    body = `<div class="muted small">Annonser från privatpersoner, upplagda senaste 3 veckorna, som ligger långt under vad samma sorts vara brukar säljas för. Kolla alltid skick och att det är samma modell.</div>` + body;
+  } else {
+    let src;
+    if (FS.mode === 'sok') { loadAllTerms(); src = FS.terms || []; if (!qn) { el.innerHTML = head + `<div class="note">Skriv ett ord ovan för att se hur det går på Blocket och Tradera.${FS.termsLoading ? ' Laddar…' : ''}</div>`; return; } }
+    else src = d._terms.filter(t => !t.cov && (FS.all || t.conf >= 2));
+    const list = src.filter(t => hit(t.k)).map(t => ({ t, v: flipVal(t) })).filter(o => o.v && (FS.mode === 'sok' || (o.v.vd && o.v.vd.cls === 'buy' && (!max || o.v.buy <= max))))
+      .sort((a, b) => FS.mode === 'sok' ? (b.t.bN + b.t.tN) - (a.t.bN + a.t.tN) : b.v.score - a.v.score);
+    body = list.length ? list.slice(0, FS.limit).map(o => flipCard(o.t)).join('') + (list.length > FS.limit ? `<button class="btn" data-flipmore="1">Visa fler (${list.length - FS.limit})</button>` : '')
+      : `<div class="note">${FS.termsLoading ? 'Laddar…' : FS.mode === 'sok' ? 'Inget ord med tillräckligt mycket data.' : 'Inga varutyper klarar regeln med de här filtren.'}</div>`;
+  }
+  el.innerHTML = head + `<div class="flips">${body}</div>
+    <div class="note small">Facebook Marketplace ingår inte: Meta blockerar automatisk hämtning. Jämför manuellt med ”FB Marketplace ↗”.</div>`;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-flipopen],[data-flipmode],[data-flipmore]'); if (!t) return;
+  if (t.dataset.flipopen) { FS.open = FS.open === t.dataset.flipopen ? null : t.dataset.flipopen; render(); return; }
+  if (t.dataset.flipmode) { FS.mode = t.dataset.flipmode; FS.limit = 40; store.set('tk-flipmode', FS.mode); render(); return; }
+  if (t.dataset.flipmore) { FS.limit += 40; render(); }
+});
+let fTimer;
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.dataset.flipq) { clearTimeout(fTimer); fTimer = setTimeout(() => { FS.q = el.value.trim(); FS.limit = 40; render(); }, 250); }
+  if (el.dataset.flipmax) { clearTimeout(fTimer); fTimer = setTimeout(() => { FS.max = el.value === '' ? null : Math.max(0, +el.value); store.set('tk-flipmax', FS.max); FS.limit = 40; render(); }, 400); }
+});
+document.addEventListener('change', e => { if (e.target.dataset.flipall) { FS.all = e.target.checked; store.set('tk-flipall', FS.all); render(); } });
+
 // ---------- vy: Databas (djupscrape av hela kategorier) ----------
 const HOME = { lat: 59.39, lon: 17.905 };   // Spånga
 const COND_NAMES = ['', 'Nytt', 'Som nytt', 'Bra skick', 'Okej skick', 'Trasigt'];
@@ -1103,7 +1274,7 @@ function renderSettings() {
 }
 
 // ---------- render ----------
-const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', databas: 'Databas', statistik: 'Statistik', installningar: 'Inställningar' };
+const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', flippa: 'Flippa', databas: 'Databas', statistik: 'Statistik', installningar: 'Inställningar' };
 function setMenu(open) {
   S.menuOpen = open; store.set('tk-menu', open);
   $('#drawer').hidden = !open;
@@ -1119,7 +1290,7 @@ function render() {
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === S.tab ? 'page' : 'false'));
   document.querySelectorAll('section[data-view]').forEach(s => { s.hidden = s.dataset.view !== S.tab; if (s.hidden) s.innerHTML = ''; });
   const active = document.activeElement && document.activeElement.id;
-  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, databas: renderDatabas, statistik: renderStats, installningar: renderSettings })[S.tab]();
+  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, flippa: renderFlip, databas: renderDatabas, statistik: renderStats, installningar: renderSettings })[S.tab]();
   renderSheet();
   if (active && !['q', 'price'].includes(active)) { const e = document.getElementById(active); if (e && e.focus) { e.focus(); try { const n = e.value.length; e.setSelectionRange(n, n); } catch {} } }
 }

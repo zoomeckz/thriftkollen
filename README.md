@@ -43,6 +43,19 @@ Under fliken **Databas** skapar du bevakningar: en Blocket-kategori (eller under
   heatmap över veckodag och timme, karta, prisfördelning, märken, fynd, budkrig och en sorterbar tabell.
 - Facebook Marketplace hämtas inte. Det kräver inloggning och Meta förbjuder automatisk insamling.
 
+### Flippa: gemensam databas för Blocket och Tradera
+
+scripts/kombo.ps1 körs sist i nattens databaskörning och slår ihop källorna per **varutyp**: ord och ordpar ur rubrikerna
+("värmeelement", "maxi cosi", "babolat"). Bara privatpersoner räknas på Blocket.
+
+- Per varutyp: till salu på Blocket (låg/median/hög), sålda på Blocket (försvunna annonser, pris och säljtid),
+  sålda på Tradera senaste 30 dagarna (riktiga slutpriser) och sålda senaste veckan.
+- **Pålitlighet:** *Säker* = Tradera-sålda och Blocket är överens om prisnivån och priserna spretar inte.
+  *Blocket-sålda* = bygger på sålda Blocket-annonser. *Bara utropspris* = bara vad folk begär, osäkert (dolt som standard).
+- Fliken **Flippa** i appen visar varutyper som klarar din vinstregel (köp i billigaste fjärdedelen eller för ditt butikspris,
+  sälj för vad det brukar gå för), billiga annonser på Blocket just nu och sök på valfritt ord. Trenden per varutyp växer varje natt.
+- Filer på grenen db: `kombo/flip.json` (appen), `kombo/terms.json` (alla ord), `kombo/trend/NN.json` (en rad per dag och ord).
+
 ### Fotoflödet
 
 1. Du tar en bild i appen och skriver valfritt vad det är.

@@ -108,6 +108,12 @@ jobs:
       - name: Översikt och trender
         shell: powershell
         run: .\scripts\aggregate.ps1 -DbDir dbdata
+      # Blocket + Tradera i en gemensam databas per varutyp, trender och flipp-listan (kombo/).
+      # Får aldrig stoppa sparandet av databasen.
+      - name: Gemensam databas och flipp-listan
+        continue-on-error: true
+        shell: powershell
+        run: .\scripts\kombo.ps1 -DbDir dbdata
       - name: Spara databasen på grenen db
         shell: powershell
         run: |
