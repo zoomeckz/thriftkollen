@@ -114,6 +114,11 @@ jobs:
         continue-on-error: true
         shell: powershell
         run: .\scripts\kombo.ps1 -DbDir dbdata
+      # Hype: sålda priser för bevakade nya varor (data/hype.json) och listan Hett just nu. Får aldrig stoppa sparandet.
+      - name: Hype
+        continue-on-error: true
+        shell: powershell
+        run: .\scripts\hype.ps1 -DbDir dbdata
       - name: Spara databasen på grenen db
         shell: powershell
         run: |

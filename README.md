@@ -62,6 +62,16 @@ scripts/kombo.ps1 körs sist i nattens databaskörning och slår ihop källorna 
   (inte automatiskt, Meta tillåter inte det). Visar var man kan köpa billigt och hur mycket som redan ligger ute.
 - Knappen **Flippa** bredvid Meny öppnar listan direkt.
 
+### Hype: nytt som säljs över nypris
+
+Knappen **Hype** bredvid Flippa. Två listor:
+
+- **Bevakade** (`data/hype.json`): konsoler, grafikkort, samlarkort, LEGO som pensioneras, klockor, skor, kläder, vinyl,
+  IKEA-samarbeten och verktyg, med nypris, varför, risk, var man köper och källor. scripts/hype.ps1 hämtar varje natt sålda
+  **oanvända** exemplar på Tradera och utropspriser på Blocket, och appen räknar vinsten om du köper till nypris.
+  Lägg till egna med "+ Bevaka".
+- **Hett just nu**: hittas automatiskt ur alla oanvända saker som sålts på Tradera senaste 30 dagarna, där många säljs med budkrig.
+
 ### Grenar
 
 - **main**: appen, skripten och inställningar (bevakningar, kategorier, kontot). GitHub Pages bygger härifrån.

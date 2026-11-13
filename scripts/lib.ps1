@@ -90,9 +90,9 @@ function Get-Blocket([string]$term, [string[]]$must) {
   return @{ items = $items; total = $total; url = "https://www.blocket.se/recommerce/forsale/search?q=$q" }
 }
 
-function Get-Tradera([string]$term, [string[]]$must) {
+function Get-Tradera([string]$term, [string[]]$must, [string]$extra = '') {
   $q = [uri]::EscapeDataString($term)
-  $html = Get-Text "https://www.tradera.com/search?q=$q&itemStatus=Ended"
+  $html = Get-Text "https://www.tradera.com/search?q=$q&itemStatus=Ended$extra"
   $chunks = $html -split 'data-item-card-id="'
   $items = @(); $seen = @{}
   for ($i = 1; $i -lt $chunks.Count; $i++) {
@@ -111,7 +111,7 @@ function Get-Tradera([string]$term, [string[]]$must) {
     if (-not $img) { $img = [regex]::Match($c, 'src="(https://img\.tradera\.net/[^"]+)"').Groups[1].Value }
     $items += [ordered]@{ s = 't'; t = $title; p = $price; img = $img; u = "https://www.tradera.com$href"; type = [regex]::Match($c, 'data-item-type="([^"]+)"').Groups[1].Value }
   }
-  return @{ items = $items; url = "https://www.tradera.com/search?q=$q&itemStatus=Ended" }
+  return @{ items = $items; url = "https://www.tradera.com/search?q=$q&itemStatus=Ended$extra" }
 }
 
 # Gör en liten JPEG-miniatyr som data-URI. Behövs bara för Claude-artifacten, som inte får ladda externa bilder.
@@ -139,14 +139,14 @@ function Get-Thumb([string]$url, [int]$size = 200) {
 
 # Hämtar och sammanställer ett sökord från båda sajterna.
 # $Must: ord som måste finnas i annonsens titel. Tomt = sökordets egna ord. '*' = inget krav.
-function Invoke-Term([string]$Q, [string]$Cat, [string]$Must = '', [int]$DelayMs = 1000, [switch]$Thumbs) {
+function Invoke-Term([string]$Q, [string]$Cat, [string]$Must = '', [int]$DelayMs = 1000, [switch]$Thumbs, [switch]$NewOnly) {
   $mustSrc = if ($Must) { $Must } else { $Q }
   $mustWords = if ($mustSrc -eq '*') { @() } else { @((Normalize $mustSrc) -split ' ' | Where-Object { $_.Length -ge 2 }) }
   $errors = @()
   $b = $null; $tr = $null
   try { $b = Get-Blocket $Q $mustWords } catch { $errors += "Blocket: $($_.Exception.Message)" }
   Start-Sleep -Milliseconds $DelayMs
-  try { $tr = Get-Tradera $Q $mustWords } catch { $errors += "Tradera: $($_.Exception.Message)" }
+  try { $tr = Get-Tradera $Q $mustWords $(if ($NewOnly) { '&af-condition=Oanv%C3%A4nt' } else { '' }) } catch { $errors += "Tradera: $($_.Exception.Message)" }
   Start-Sleep -Milliseconds $DelayMs
 
   $bItems = if ($b) { @($b.items) } else { @() }

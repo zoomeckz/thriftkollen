@@ -1,0 +1,214 @@
+{
+ "v": 1,
+ "researchedAt": "2026-11-13",
+ "note": "Saker som kan säljas över nypris i Sverige. Nypriset är butikspriset i kr (ca = ungefärligt, kolla innan du köper). q är sökningen som scripts/hype.ps1 kör varje natt mot Tradera (sålda) och Blocket (till salu).",
+ "items": [
+  {
+   "id": "zelda-switch2-40th", "name": "Switch 2 – Zelda 40th Anniversary Edition", "cat": "Spel & konsoler",
+   "retail": 7290, "status": "Slutsåld ofta", "date": "2026-10-29",
+   "q": "switch 2 zelda 40th", "must": "zelda 40th",
+   "why": "Sålde slut på timmar världen över. I Sverige slutsåld hos Elgiganten, oöppnade exemplar ligger runt 8 500–8 700 kr.",
+   "risk": "Nintendo har lovat påfyllning. När butikerna får in fler sjunker andrahandspriset snabbt. Sälj oöppnad.",
+   "where": [{ "t": "Elgiganten", "u": "https://www.elgiganten.se" }, { "t": "Kjell", "u": "https://www.kjell.com/se" }, { "t": "Inet", "u": "https://www.inet.se" }],
+   "src": [{ "t": "Kjell, 7 290 kr", "u": "https://www.kjell.com/se/produkter/tv-spel-gaming/spelkonsol/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition-256-gb-p13050" }, { "t": "Gamingbible: slutsåld, säljs vidare", "u": "https://www.gamingbible.com/news/platform/nintendo/zelda-switch-2-sold-out-resellers-955762-20260909" }]
+  },
+  {
+   "id": "rtx-5090", "name": "Nvidia RTX 5090", "cat": "Datorer & grafikkort",
+   "retail": 27999, "status": "Brist", "date": "",
+   "q": "rtx 5090", "must": "5090",
+   "why": "AI-efterfrågan tömmer lagren. Hälften av modellerna slutsålda hos Inet i oktober, och priserna har stigit kraftigt. Köp till lanseringspris när ett lager fylls på.",
+   "risk": "Stor insats. Mycket bedrägerier, sälj bara med spårbar frakt eller vid upphämtning. Priset kan vända när nästa generation kommer.",
+   "where": [{ "t": "Inet", "u": "https://www.inet.se" }, { "t": "Komplett", "u": "https://www.komplett.se" }, { "t": "Webhallen", "u": "https://www.webhallen.com" }, { "t": "Prisjakt", "u": "https://www.prisjakt.nu" }],
+   "src": [{ "t": "SweClockers: lagren tryter", "u": "https://www.sweclockers.com/nyhet/43294-rtx-5090-lagren-borjar-tryta" }, { "t": "PCWorld: slutsålt, scalpers", "u": "https://www.pcworld.com/article/3038922/rtx-5090-cards-sell-out-while-scalpers-make-bank.html" }]
+  },
+  {
+   "id": "steam-machine", "name": "Valve Steam Machine", "cat": "Spel & konsoler",
+   "retail": 11900, "approx": true, "status": "Slutsåld ofta", "date": "2026-06-30",
+   "q": "steam machine", "must": "steam machine",
+   "why": "Sålde slut på tio minuter. Europeiska återförsäljare har tagit 50–80 % över Valves pris (från 1 039 €).",
+   "risk": "Valve säljer i omgångar via kö. Blandade recensioner kan dämpa efterfrågan när leveranserna kommer igång.",
+   "where": [{ "t": "Steam", "u": "https://store.steampowered.com" }],
+   "src": [{ "t": "Gamereactor: priser", "u": "https://www.gamereactor.eu/valve-announces-prices-for-steam-machine-well-over-1000-in-all-four-editions-1738373/" }, { "t": "Återförsäljare tar ~2 000 $", "u": "https://en.gamegpu.com/news/zhelezo/evropejskie-resellery-nachali-pereprodavat-novye-valve-steam-machine-po-usd2000" }]
+  },
+  {
+   "id": "gta6-collectors", "name": "GTA VI Collector's Box", "cat": "Spel & konsoler",
+   "retail": 4500, "approx": true, "status": "I lager hos Rockstar", "date": "",
+   "q": "gta 6 collectors box", "must": "collector",
+   "why": "Säljs för 2–4 gånger priset på eBay redan innan den är slut. Spelet ingår inte, lådan är ren samlarvara.",
+   "risk": "Fortfarande köpbar hos Rockstar, så priset kan falla. Mycket bluffannonser.",
+   "where": [{ "t": "Rockstar Store", "u": "https://store.rockstargames.com" }],
+   "src": [{ "t": "MP1st: upp till 1 500 $", "u": "https://mp1st.com/news/gta-6-collectors-edition-scalpers-charging-1500-despite-still-in-stock" }]
+  },
+  {
+   "id": "pokemon-30th-etb", "name": "Pokémon 30th Celebration – Elite Trainer Box", "cat": "Samlarkort",
+   "retail": 699, "approx": true, "status": "Slutsåld ofta", "date": "2026-09-16",
+   "q": "30th celebration elite trainer box", "must": "30th",
+   "why": "Sålde slut på minuter. Fler vågor släpps fram till 4 december. Förseglade lådor har gått för upp till tre gånger priset.",
+   "risk": "Hög upplaga och fler vågor pressar priset. Sälj förseglat. Tänk långsiktigt eller sälj direkt.",
+   "where": [{ "t": "Webhallen", "u": "https://www.webhallen.com" }, { "t": "Alphaspel", "u": "https://alphaspel.se" }, { "t": "Prisjakt", "u": "https://www.prisjakt.nu" }],
+   "src": [{ "t": "Pokeled: slutsåld, vågor", "u": "https://pokeled.com/en/blogs/pokemon/pokemon-30th-celebration-sold-out-restock" }, { "t": "Kotaku: priserna föll", "u": "https://kotaku.com/pokemon-tcg-30th-anniversary-set-prices-scalpers-resale-reddit-2000736052" }]
+  },
+  {
+   "id": "pokemon-booster-box", "name": "Pokémon booster box (förseglad, äldre set)", "cat": "Samlarkort",
+   "retail": null, "status": "Långsiktigt", "date": "",
+   "q": "pokemon booster box förseglad", "must": "booster box",
+   "why": "Nya set ligger nära nypris, men förseglade lådor stiger när setet slutar tryckas. Äldre lådor har gått för mångdubbelt.",
+   "risk": "Kräver tålamod (år) och förvaring. Förfalskade och omplastade lådor finns.",
+   "where": [{ "t": "Alphaspel", "u": "https://alphaspel.se" }, { "t": "Webhallen", "u": "https://www.webhallen.com" }],
+   "src": [{ "t": "Ripster: lådor som investering", "u": "https://www.ripster.gg/blog/pokemon-booster-boxes-worth-investing" }]
+  },
+  {
+   "id": "lego-75192", "name": "LEGO 75192 Millennium Falcon (UCS)", "cat": "Leksaker & LEGO",
+   "retail": 8499, "approx": true, "status": "Pensioneras 31 dec", "date": "2026-12-31",
+   "q": "lego 75192", "must": "75192",
+   "why": "Pensioneras vid årsskiftet. Stora Star Wars-set brukar stiga efter att de slutat säljas.",
+   "risk": "Binder mycket pengar i flera år. Köp på rea (Black Friday) och spara oöppnad.",
+   "where": [{ "t": "LEGO.com", "u": "https://www.lego.com/sv-se" }, { "t": "Prisjakt", "u": "https://www.prisjakt.nu" }],
+   "src": [{ "t": "Pensioneras 31 dec 2026", "u": "https://www.underpriced.app/blog/best-things-to-flip-for-profit-2026" }]
+  },
+  {
+   "id": "lego-75389", "name": "LEGO 75389 The Dark Falcon", "cat": "Leksaker & LEGO",
+   "retail": 1999, "approx": true, "status": "Pensioneras 31 dec", "date": "2026-12-31",
+   "q": "lego 75389", "must": "75389",
+   "why": "Star Wars-set som pensioneras vid årsskiftet. Mindre insats än UCS-seten.",
+   "risk": "Mindre set stiger långsammare. Sparas oöppnat.",
+   "where": [{ "t": "LEGO.com", "u": "https://www.lego.com/sv-se" }, { "t": "Prisjakt", "u": "https://www.prisjakt.nu" }],
+   "src": [{ "t": "Brick Fanatics: pensioneras 2026", "u": "https://www.brickfanatics.com/every-lego-set-due-retired-in-2026-october-update" }]
+  },
+  {
+   "id": "lego-40819", "name": "LEGO 40819 Up-Scaled Racing Driver", "cat": "Leksaker & LEGO",
+   "retail": 399, "approx": true, "status": "Pensioneras 31 dec", "date": "2026-12-31",
+   "q": "lego 40819", "must": "40819",
+   "why": "Första storfiguren i serien som försvinner ur butik. Liknande set (TIE Pilot-hjälmen) steg kraftigt.",
+   "risk": "Låg insats, men vinsten per styck är liten. Köp några, inte många.",
+   "where": [{ "t": "LEGO.com", "u": "https://www.lego.com/sv-se" }],
+   "src": [{ "t": "Brick Fanatics", "u": "https://www.brickfanatics.com/retiring-lego-minifigure-set-next-tie-pilot-helmet" }]
+  },
+  {
+   "id": "swatch-royal-pop", "name": "Swatch x Audemars Piguet Royal Pop", "cat": "Klockor",
+   "retail": 4300, "approx": true, "status": "Bara i butik", "date": "2026-05-16",
+   "q": "swatch royal pop", "must": "royal pop",
+   "why": "Säljs bara i Swatch-butiker, en per person och dag. Köer och snabbt slutsålt.",
+   "risk": "Priserna rasade efter första veckan när fler kom ut. Köp bara på nya släppdagar och sälj direkt.",
+   "where": [{ "t": "Swatch Stockholm", "u": "https://www.swatch.com/sv-se" }],
+   "src": [{ "t": "Robb Report: köer och andrahand", "u": "https://robbreport.com/style/watch-collector/audemars-piguet-swatch-royal-pop-in-store-chaos-resale-1238092188/" }, { "t": "Man of Many: priserna rasade", "u": "https://manofmany.com/watches/swatch-x-audemars-prices-crashed" }]
+  },
+  {
+   "id": "moonswatch", "name": "MoonSwatch specialsläpp", "cat": "Klockor",
+   "retail": 3100, "approx": true, "status": "Släpps i omgångar", "date": "",
+   "q": "moonswatch", "must": "moonswatch",
+   "why": "Engångssläpp (som Solar Eclipse för 280 €, en dag i ett land) tar slut direkt och säljs med påslag.",
+   "risk": "Vanliga MoonSwatch säljs under nypris. Bara specialsläppen lönar sig.",
+   "where": [{ "t": "Swatch", "u": "https://www.swatch.com/sv-se" }],
+   "src": [{ "t": "Swatch-släpp 2026", "u": "https://rolexexpert.io/swatch-rolex-collaboration/" }]
+  },
+  {
+   "id": "jordan-retro", "name": "Air Jordan 4/5 Retro (nya släpp)", "cat": "Kläder & skor",
+   "retail": 2399, "approx": true, "status": "Släpps i omgångar", "date": "",
+   "q": "air jordan 4 retro", "must": "jordan retro",
+   "why": "Jordan-retros är de mest sålda skorna på StockX 2026. Lotterier i Nike SNKRS-appen.",
+   "risk": "Bara ungefär hälften av skosläppen lönar sig. Välj populära färger och vanliga storlekar (42–44).",
+   "where": [{ "t": "Nike SNKRS", "u": "https://www.nike.com/se/launch" }, { "t": "Sneakersnstuff", "u": "https://www.sneakersnstuff.com" }],
+   "src": [{ "t": "StockX Big Facts 2026", "u": "https://www.prnewswire.com/news-releases/stockxs-latest-big-facts-report-spotlights-the-trends-that-defined-2026-offers-a-preview-of-the-products-set-to-dominate-this-holiday-season-302937751.html" }]
+  },
+  {
+   "id": "gymshark-onyx", "name": "Gymshark Onyx (begränsade släpp)", "cat": "Kläder & skor",
+   "retail": 600, "approx": true, "status": "Begränsade släpp", "date": "",
+   "q": "gymshark onyx", "must": "onyx",
+   "why": "Onyx-släppen tar slut på minuter och har sålts för flera gånger priset. Månatliga begränsade släpp i Gymshark-appen.",
+   "risk": "Vanliga Gymshark-plagg säljs billigt i andra hand. Bara begränsade serier.",
+   "where": [{ "t": "Gymshark", "u": "https://www.gymshark.com" }],
+   "src": [{ "t": "ResellCalendar: Onyx V5", "u": "https://resellcalendar.com/news/news/gymshark-onyx-v5-sold-out-reseller-tank-tee/" }]
+  },
+  {
+   "id": "hm-elie-saab", "name": "H&M x Elie Saab", "cat": "Kläder & skor",
+   "retail": null, "status": "Släppt 22 okt", "date": "2026-10-22",
+   "q": "elie saab h&m", "must": "saab",
+   "why": "H&M:s designersamarbeten får köer och säljs vidare på Tradera och Vinted. Klänningar och accessoarer brukar gå bäst.",
+   "risk": "Varierar mycket per plagg. Kolla sålda priser per plagg innan du köper fler.",
+   "where": [{ "t": "H&M", "u": "https://www2.hm.com/sv_se" }],
+   "src": [{ "t": "Retail Gazette: köer", "u": "https://www.retailgazette.co.uk/blog/2026/10/queues-hm-drops-elie-saab/" }]
+  },
+  {
+   "id": "arcteryx", "name": "Arc'teryx skaljackor", "cat": "Kläder & skor",
+   "retail": 7500, "approx": true, "status": "Köp på rea", "date": "",
+   "q": "arcteryx beta", "must": "arcteryx beta",
+   "why": "Behåller värdet extremt bra i Sverige. Köp på rea eller outlet och sälj till fullpris inför vintern.",
+   "risk": "Många förfalskningar. Kvitto och tydliga bilder på etiketter säljer.",
+   "where": [{ "t": "Arc'teryx", "u": "https://arcteryx.com/se/sv" }, { "t": "Prisjakt", "u": "https://www.prisjakt.nu" }],
+   "src": []
+  },
+  {
+   "id": "crocs-lego", "name": "Crocs x LEGO Brick Clog", "cat": "Kläder & skor",
+   "retail": 999, "approx": true, "status": "Begränsade släpp", "date": "",
+   "q": "crocs lego brick", "must": "crocs lego",
+   "why": "En av Crocs mest sålda nya modeller 2026, med ett av de högsta andrahandspriserna (194 $).",
+   "risk": "Kan bli vanlig i butik. Följ hur Tradera-priset utvecklas.",
+   "where": [{ "t": "Crocs", "u": "https://www.crocs.se" }],
+   "src": [{ "t": "StockX Big Facts 2026", "u": "https://www.prnewswire.com/news-releases/stockxs-latest-big-facts-report-spotlights-the-trends-that-defined-2026-offers-a-preview-of-the-products-set-to-dominate-this-holiday-season-302937751.html" }]
+  },
+  {
+   "id": "needoh", "name": "NeeDoh squishy-leksaker", "cat": "Leksaker & LEGO",
+   "retail": 129, "approx": true, "status": "Trend", "date": "",
+   "q": "needoh", "must": "needoh",
+   "why": "Årets överraskning: säljs i snitt för sju gånger priset i USA. Billig insats.",
+   "risk": "Trender som den här kan dö på några veckor. Köp lite och sälj snabbt.",
+   "where": [{ "t": "Leksaksbutiker", "u": "https://www.prisjakt.nu" }],
+   "src": [{ "t": "StockX Big Facts 2026", "u": "https://www.prnewswire.com/news-releases/stockxs-latest-big-facts-report-spotlights-the-trends-that-defined-2026-offers-a-preview-of-the-products-set-to-dominate-this-holiday-season-302937751.html" }]
+  },
+  {
+   "id": "labubu", "name": "Labubu (Pop Mart)", "cat": "Leksaker & LEGO",
+   "retail": 199, "approx": true, "status": "Svalnar", "date": "",
+   "q": "labubu", "must": "labubu",
+   "why": "Med som varning: hypen har svalnat kraftigt. Vanliga lådor säljs under priset, bara hemliga figurer och sällsynta serier håller värdet.",
+   "risk": "Pop Marts försäljning har fallit kraftigt. Köp inte för att sälja vidare utan att kolla Tradera först.",
+   "where": [{ "t": "Pop Mart", "u": "https://www.popmart.com" }],
+   "src": [{ "t": "Försäljningen faller", "u": "https://piratesandprincesses.net/labubu-craze-cools-pop-marts-americas-sales-fell-up-to-75/" }]
+  },
+  {
+   "id": "rsd-black-friday", "name": "Record Store Day Black Friday (vinyl)", "cat": "Musik",
+   "retail": 350, "approx": true, "status": "Släpps 27 nov", "date": "2026-11-27",
+   "q": "record store day vinyl", "must": "record store day",
+   "why": "Över 150 begränsade vinylsläpp bara i oberoende skivbutiker. Populära titlar säljs på Tradera för flera gånger priset samma vecka.",
+   "risk": "Många titlar säljs aldrig slut. Välj stora artister och små upplagor. Stå i kö tidigt.",
+   "where": [{ "t": "Record Store Day", "u": "https://recordstoreday.com" }],
+   "src": [{ "t": "Officiella listan", "u": "https://www.officialcharts.com/chart-news/record-store-day-2026-black-friday-vinyl-releases-sombr-shawn-mendes-queen/" }]
+  },
+  {
+   "id": "ikea-konstrunda", "name": "IKEA KONSTRUNDA (samlarobjekt)", "cat": "Hem & design",
+   "retail": 299, "approx": true, "status": "Begränsad kollektion", "date": "2026-09-01",
+   "q": "konstrunda", "must": "konstrunda",
+   "why": "Konstföremål av sju formgivare, begränsad kollektion. Tidigare IKEA-samarbeten (Virgil Abloh, Art Event) säljs för flera gånger priset.",
+   "risk": "Inga bekräftade andrahandspriser än. Följ Tradera-siffrorna här innan du köper fler.",
+   "where": [{ "t": "IKEA", "u": "https://www.ikea.com/se/sv" }],
+   "src": [{ "t": "IKEA: KONSTRUNDA", "u": "https://www.ikea.com/global/en/newsroom/collaborations/konstrunda-260813/" }]
+  },
+  {
+   "id": "ikea-yxstaby", "name": "IKEA x Xbox YXSTABY", "cat": "Hem & design",
+   "retail": null, "status": "Begränsad kollektion", "date": "2026-10-01",
+   "q": "yxstaby", "must": "yxstaby",
+   "why": "Gamingmöbler i samarbete med Xbox. Samarbeten med kända varumärken blir ofta samlarobjekt när de slutat säljas.",
+   "risk": "Möbler är skrymmande att lagra och frakta. Satsa på de mindre delarna.",
+   "where": [{ "t": "IKEA", "u": "https://www.ikea.com/se/sv" }],
+   "src": [{ "t": "Xbox Wire", "u": "https://news.xbox.com/en-us/2026/10/01/ikea-xbox-gaming-collection-yxstaby/" }]
+  },
+  {
+   "id": "festool-limited", "name": "Festool jubileums- och limited-utgåvor", "cat": "Verktyg",
+   "retail": null, "status": "Begränsade utgåvor", "date": "",
+   "q": "festool limited edition", "must": "festool limited",
+   "why": "Festool håller värdet bäst av alla verktyg, och jubileumsutgåvor (blå skena, 100 år) är eftertraktade bland snickare.",
+   "risk": "Liten marknad. Säljs bäst oöppnade, till hantverkare på Tradera och Blocket.",
+   "where": [{ "t": "Festool", "u": "https://www.festool.se" }],
+   "src": [{ "t": "Festool 100 år, limited", "u": "https://www.leevalley.com/en-us/shop/tools/power-tools/saws/circular-saw/118354-festool-100-years-cordless-track-saw-tsc-55-kebi-f-plus-xl-100y-limited-edition" }]
+  }
+ ],
+ "tips": [
+  ["Black Friday-arbitrage", "Köp verktyg, LEGO och elektronik på djup rea (27 nov) och sälj i december till ordinarie pris. Köparna jämför inte med rean."],
+  ["Pensionerade LEGO-set", "Set som slutar säljas 31 dec stiger ofta 30–100 % på några år. Köp på rea, spara oöppnat, sälj när de försvunnit från butikerna."],
+  ["Släppdagar", "Konsoler, Pokémon, skor och klockor tar ofta slut första timmen. Följ butikernas lagersidor och appar (SNKRS, Gymshark, Webhallen) och var där när det öppnar."],
+  ["Sälj oöppnat och snabbt", "Hypevaror tappar i värde när butikerna fylls på. Sälj de första veckorna, oöppnat, med kvitto."],
+  ["Kolla siffrorna här först", "Priserna i listan är riktiga Tradera-slutpriser från i natt, inte vad folk begär. Stämmer inte siffrorna, köp inte."],
+  ["Inte tillåtet", "Alkohol från Systembolaget får inte säljas vidare utan tillstånd. Biljetter till evenemang säljs ofta med villkor som förbjuder vidareförsäljning."],
+  ["Skatt", "Köper du saker för att sälja med vinst räknas det som näringsverksamhet och vinsten ska deklareras. Det gäller inte när du säljer dina egna begagnade saker med förlust."]
+ ]
+}

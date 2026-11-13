@@ -244,6 +244,18 @@ details.panel[open] > summary::after { content: " ▴"; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 /* Flippa */
 .flip-btn { text-decoration: none; color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.hype-btn { text-decoration: none; color: var(--tag-ink); background: var(--tag); border-color: var(--tag); }
+@media (max-width: 420px) { .topbar .flip-btn, .topbar .hype-btn { padding: 8px 10px; } .topbar { gap: 6px; } }
+.hype-sub { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem; color: var(--muted); }
+.hype-sub b, .hype-line b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.hype-line { font-size: .85rem; color: var(--muted); line-height: 1.45; }
+.hot-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.hot-row:first-child { border-top: 0; }
+.hot-row .k { font-weight: 700; text-transform: capitalize; }
+.hot-row .mini { grid-column: 1 / -1; display: flex; gap: 6px; overflow: hidden; }
+.hot-row .mini a { flex: 0 0 64px; }
+.hot-row .mini img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
+.src-list { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .78rem; }
 .src.f { color: #C9A0FF; }
 .fb-list { display: grid; gap: 6px; }
 .fb-list a { display: flex; justify-content: space-between; gap: 10px; color: var(--ink); text-decoration: none; font-size: .85rem; }
@@ -274,6 +286,7 @@ details.how p { margin: 8px 0 0; }
       <span class="pill" id="queryChip" hidden></span>
       <span class="pill price-chip" id="priceChip" hidden></span>
     </button>
+    <a class="menu-btn hype-btn" id="hypeBtn" href="#hype">Hype</a>
     <a class="menu-btn flip-btn" id="flipBtn" href="#flippa">Flippa</a>
     <button class="menu-btn" id="menuToggle" type="button" aria-expanded="false" aria-controls="drawer">
       <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span><span id="menuLabel">Meny</span>
@@ -296,6 +309,7 @@ details.how p { margin: 8px 0 0; }
         <a href="#foto" data-tab="foto">Fota<span class="dot" id="pendingDot" hidden></span></a>
         <a href="#lager" data-tab="lager">Lager</a>
         <a href="#flippa" data-tab="flippa">Flippa</a>
+        <a href="#hype" data-tab="hype">Hype</a>
         <a href="#databas" data-tab="databas">Databas</a>
         <a href="#statistik" data-tab="statistik">Statistik</a>
         <a href="#installningar" data-tab="installningar">Inställningar</a>
@@ -312,6 +326,7 @@ details.how p { margin: 8px 0 0; }
   <section data-view="lager" id="v-lager" hidden></section>
   <section data-view="statistik" id="v-statistik" hidden></section>
   <section data-view="flippa" id="v-flippa" hidden></section>
+  <section data-view="hype" id="v-hype" hidden></section>
   <section data-view="databas" id="v-databas" hidden></section>
   <section data-view="installningar" id="v-installningar" hidden></section>
 </main>
@@ -328,7 +343,7 @@ const CATS = ['Möbler & stolar', 'Porslin & glas', 'Elektronik & retro', 'Kläd
 const DEFAULT_CFG = { minProfit: 100, minMult: 2, mode: 'any', valuation: 'bal', platform: 'tradera',
   traderaPct: 10, traderaMin: 3, traderaCap: 200, blocketFee: 0, haggle: 20,
   packCost: 0, payShip: false, shipCost: 59 };   // frakt: förpackning per försäljning, och om du själv betalar frakten
-const TABS = ['fynd', 'foto', 'lager', 'flippa', 'databas', 'statistik', 'installningar'];
+const TABS = ['fynd', 'foto', 'lager', 'flippa', 'hype', 'databas', 'statistik', 'installningar'];
 
 // ---------- lagring på enheten ----------
 const store = {
@@ -1320,6 +1335,117 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => { if (e.target.dataset.flipall) { FS.all = e.target.checked; store.set('tk-flipall', FS.all); render(); } });
 
+// ---------- vy: Hype (nya saker som säljs över nypris) ----------
+// data/hype.json (main): bevakade varor med nypris, varför och risker. hype/hype.json (grenen db): nattens sålda priser
+// för oanvända exemplar på Tradera, utropspriser på Blocket och listan "Hett just nu" som hittas automatiskt.
+const HS = { cfg: null, db: null, loading: false, err: null, view: store.get('tk-hypeview', 'bevakade'), cat: 'Alla', open: null, form: false };
+async function loadHype(force) {
+  if ((HS.cfg || HS.loading) && !force) return;
+  HS.loading = true;
+  try { [HS.cfg, HS.db] = await Promise.all([readRepoJson('data/hype.json'), readDbFile('hype/hype.json').catch(() => null)]); HS.err = null; }
+  catch (e) { HS.err = e.message; }
+  HS.loading = false; render();
+}
+function hypeVal(it) {
+  const d = HS.db && HS.db.items ? HS.db.items.find(x => x.id === it.id) : null;
+  const t = d && d.t, b = d && d.b;
+  const sold = t && t.n >= 3 ? t.med : null;
+  if (sold == null || !it.retail) return { d, t, b, sold, vd: null };
+  const net = sold - fee('tradera', sold) - extraCost();
+  return { d, t, b, sold, net, vd: verdict({ net, max: maxBuy(net) }, it.retail) };
+}
+function hypeSpark(hist) {
+  const h = (hist || []).filter(r => r[1] > 0); if (h.length < 2) return '';
+  const w = 120, H = 28, mx = Math.max(...h.map(r => r[1])), mn = Math.min(...h.map(r => r[1])), span = Math.max(1, mx - mn);
+  const pts = h.map((r, i) => `${(i / (h.length - 1) * w).toFixed(1)},${(H - 3 - (r[1] - mn) / span * (H - 6)).toFixed(1)}`).join(' ');
+  const up = h[h.length - 1][1] >= h[0][1];
+  return `<span class="row small muted"><svg width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--${up ? 'good' : 'bad'})" stroke-width="2"/></svg>${up ? 'stiger' : 'faller'} senaste ${h.length} dagarna</span>`;
+}
+function hypeCard(it) {
+  const v = hypeVal(it), open = HS.open === it.id;
+  const profit = v.vd ? `<div class="flip-profit ${v.vd.cls} num">${v.vd.profit >= 0 ? '+' : ''}${kr(v.vd.profit)}</div>` : `<div class="flip-profit num">${v.sold ? '' : '–'}</div>`;
+  const line = `${it.retail ? `Nypris ${it.approx ? 'ca ' : ''}<b>${kr(it.retail)}</b>` : 'Nypris varierar'} → ${v.sold ? `säljs för <b>${kr(v.sold)}</b> <span>(${v.t.n} sålda oanvända på Tradera)</span>` : '<span>inga sålda oanvända på Tradera än</span>'}`;
+  let body = '';
+  if (open) {
+    const list = v.d && v.d.list ? v.d.list : [];
+    body = `<div class="flip-body">
+      <p class="small">${esc(it.why)}</p>
+      <div class="note warn small"><b>Risk:</b> ${esc(it.risk)}</div>
+      <div class="kv">
+        <div><span>Tradera, sålda oanvända</span><b>${v.t ? kr(v.t.med) : '–'}</b><span>${v.t ? `${v.t.n} st · ${kr(v.t.p25)}–${kr(v.t.p75)}` : 'ingen data'}</span></div>
+        <div><span>Blocket, till salu nu</span><b>${v.b ? kr(v.b.med) : '–'}</b><span>${v.b ? `${v.b.n} st · utropspris` : 'ingen data'}</span></div>
+        <div><span>Du får ut efter avgift</span><b>${v.net != null ? kr(v.net) : '–'}</b><span>Tradera ${S.cfg.traderaPct} %${S.cfg.packCost ? ' + förpackning' : ''}</span></div>
+        <div><span>Multipel</span><b>${v.vd && isFinite(v.vd.mult) ? 'x' + v.vd.mult.toFixed(2).replace('.', ',') : '–'}</b><span>${v.vd ? v.vd.label : ''}</span></div>
+      </div>
+      ${v.d ? hypeSpark(v.d.hist) : ''}
+      ${list.length ? `<div class="listings">${list.map(([s, t, p, img, u]) => { const su = safeUrl(u), si = safeImg(img); return `<a class="listing" ${su ? `href="${su}" target="_blank" rel="noopener"` : ''}>${si ? imgTag(si) : '<div class="ph"></div>'}<div class="p"><span class="src ${s}">${s === 't' ? 'Såld' : 'Blocket'}</span><span class="num">${kr(p)}</span></div><div class="t muted">${esc(t)}</div></a>`; }).join('')}</div>` : ''}
+      <div class="row">${(it.where || []).map(w => `<a class="btn small" href="${esc(w.u)}" target="_blank" rel="noopener">Köp: ${esc(w.t)} ↗</a>`).join('')}${searchLinks(it.q)}</div>
+      ${(it.src || []).length ? `<div class="src-list muted">Källor: ${it.src.map(x => `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t)}</a>`).join('')}</div>` : ''}
+    </div>`;
+  }
+  return `<div class="flip${open ? ' open' : ''}">
+    <button class="flip-head" data-hypeopen="${esc(it.id)}" aria-expanded="${open}">
+      <div class="flip-main"><div class="flip-name" style="text-transform:none">${esc(it.name)}</div>
+        <div class="hype-line">${line}</div>
+        <div class="meta"><span class="pill">${esc(it.cat)}</span>${it.status ? `<span class="pill ${/slut|brist|pensioneras|släpps/i.test(it.status) ? 'mid' : /svalnar/i.test(it.status) ? 'slow' : ''}">${esc(it.status)}${it.date && /släpps|pensioneras/i.test(it.status) ? '' : ''}</span>` : ''}</div></div>
+      ${profit}
+    </button>${body}</div>`;
+}
+function hotHTML() {
+  const hot = (HS.db && HS.db.hot) || [];
+  if (!hot.length) return `<div class="note">Listan byggs i nattens körning ur alla oanvända saker som sålts på Tradera.</div>`;
+  const img = HS.db.traderaImg, url = HS.db.traderaUrl;
+  return `<div class="panel"><p class="muted small">Hittas automatiskt varje natt: saker som säljs <b>oanvända</b> på Tradera med många bud (budkrig), senaste 30 dagarna, ur ${(HS.db.hotRows || 0).toLocaleString('sv-SE')} sålda oanvända annonser. Nypriset är okänt, så kolla själv vad det kostar i butik.</p>
+    <div>${hot.map(h => `<div class="hot-row">
+      <div><div class="k">${esc(h.k)}</div><div class="hype-sub"><span><b>${h.n}</b> sålda</span><span>median <b>${kr(h.med)}</b></span><span>${kr(h.p25)}–${kr(h.p75)}</span><span><b>${String(h.bids).replace('.', ',')}</b> bud i snitt</span></div></div>
+      <a class="btn small" href="https://www.tradera.com/search?q=${encodeURIComponent(h.k)}&itemStatus=Ended" target="_blank" rel="noopener">Sålda ↗</a>
+      <div class="mini">${(h.ex || []).map(([id, t, p, im, bids]) => `<a href="${esc(url + id)}" target="_blank" rel="noopener" title="${esc(t)} · ${kr(p)} · ${bids} bud">${im ? imgTag(esc(img + im)) : ''}</a>`).join('')}</div>
+    </div>`).join('')}</div></div>`;
+}
+function renderHype() {
+  const el = $('#v-hype');
+  if (!HS.cfg && !HS.loading && !HS.err) loadHype();
+  const c = HS.cfg, items = c ? c.items : [];
+  const cats = ['Alla', ...new Set(items.map(i => i.cat))];
+  const head = `<div class="panel"><div class="spread"><div><div class="lbl">Nytt som säljs över nypris${HS.db ? ' · priser ' + when(HS.db.updatedAt) : ''}</div><h2>Hype</h2></div>
+      <button class="btn small" data-hypeform="1">${HS.form ? 'Stäng' : '+ Bevaka'}</button></div>
+    <div class="chips" role="group" aria-label="Visa">${[['bevakade', 'Bevakade'], ['hett', 'Hett just nu']].map(([k, l]) => `<button class="chip" data-hypeview="${k}" aria-pressed="${HS.view === k}">${l}</button>`).join('')}</div>
+    ${HS.form ? `<form id="hypeForm" class="form-grid" style="border-top:1px solid var(--line);padding-top:14px">
+      <div class="field" style="grid-column:1/-1"><label for="h-name">Vara</label><input id="h-name" type="text" required placeholder="t.ex. PS5 Pro 30th Anniversary"></div>
+      <div class="field"><label for="h-retail">Nypris (kr)</label><input id="h-retail" type="number" inputmode="numeric" min="0"></div>
+      <div class="field"><label for="h-q">Sökord på Tradera</label><input id="h-q" type="text" placeholder="Fylls i från namnet"></div>
+      <div class="field"><label for="h-cat">Kategori</label><input id="h-cat" type="text" list="hypeCats" value="Övrigt"><datalist id="hypeCats">${cats.slice(1).map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
+      <button class="btn primary" type="submit" ${gh.token ? '' : 'disabled'}>Bevaka</button>
+      <p class="muted small" style="grid-column:1/-1">Priserna hämtas i nattens körning. ${gh.token ? '' : 'Logga in för att lägga till.'}</p></form>` : ''}
+  </div>`;
+  if (HS.loading && !c) { el.innerHTML = head + '<div class="note">Laddar…</div>'; return; }
+  if (HS.err) { el.innerHTML = head + `<div class="note bad">Kunde inte läsa listan: ${esc(HS.err)}</div>`; return; }
+  if (HS.view === 'hett') { el.innerHTML = head + hotHTML(); return; }
+  const list = items.filter(i => HS.cat === 'Alla' || i.cat === HS.cat).map(i => ({ i, v: hypeVal(i) }))
+    .sort((a, b) => (b.v.vd ? b.v.vd.profit : -1e9) - (a.v.vd ? a.v.vd.profit : -1e9));
+  const tips = c && c.tips ? `<details class="panel how"><summary>Så tjänar man på hype (och vad man inte får göra)</summary>${c.tips.map(([h, t]) => `<p class="small"><b>${esc(h)}.</b> <span class="muted">${esc(t)}</span></p>`).join('')}</details>` : '';
+  el.innerHTML = head + `<div class="chips" role="group" aria-label="Kategori">${cats.map(x => `<button class="chip" data-hypecat="${esc(x)}" aria-pressed="${HS.cat === x}">${esc(x)}</button>`).join('')}</div>
+    <div class="muted small">Sorterat på vinst efter Tradera-avgift om du köper till nypris och säljer oanvänt. Regel: ${ruleText()}. Nypriser är ungefärliga, kolla butiken.</div>
+    <div class="flips">${list.map(o => hypeCard(o.i)).join('')}</div>${tips}`;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-hypeopen],[data-hypeview],[data-hypecat],[data-hypeform]'); if (!t) return;
+  if (t.dataset.hypeopen) { HS.open = HS.open === t.dataset.hypeopen ? null : t.dataset.hypeopen; render(); return; }
+  if (t.dataset.hypeview) { HS.view = t.dataset.hypeview; store.set('tk-hypeview', HS.view); render(); return; }
+  if (t.dataset.hypecat) { HS.cat = t.dataset.hypecat; render(); return; }
+  if (t.dataset.hypeform) { HS.form = !HS.form; render(); }
+});
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'hypeForm') return;
+  e.preventDefault();
+  const name = $('#h-name').value.trim(); if (!name) return;
+  const q = $('#h-q').value.trim() || name.toLowerCase();
+  const it = { id: slug(name).slice(0, 50) + '-' + Date.now().toString(36).slice(-3), name, cat: $('#h-cat').value.trim() || 'Övrigt', retail: +$('#h-retail').value || null,
+    status: 'Egen bevakning', date: '', q, must: q.split(' ').filter(w => w.length > 2).slice(0, 2).join(' '), why: 'Din egen bevakning.', risk: 'Kolla sålda priser innan du köper många.', where: [], src: [] };
+  try { await updateRepoJson('data/hype.json', d => ({ ...d, items: [...d.items, it] }), 'Hype: bevaka ' + name); HS.cfg.items.push(it); HS.form = false; render(); toast('Bevakas. Priserna kommer i nattens körning.'); }
+  catch (err) { toast('Kunde inte spara: ' + err.message); }
+}, true);
+
 // ---------- vy: Databas (djupscrape av hela kategorier) ----------
 const HOME = { lat: 59.39, lon: 17.905 };   // Spånga
 const COND_NAMES = ['', 'Nytt', 'Som nytt', 'Bra skick', 'Okej skick', 'Trasigt'];
@@ -1660,7 +1786,7 @@ function renderSettings() {
 }
 
 // ---------- render ----------
-const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', flippa: 'Flippa', databas: 'Databas', statistik: 'Statistik', installningar: 'Inställningar' };
+const TAB_NAMES = { fynd: 'Katalog', foto: 'Fota', lager: 'Lager', flippa: 'Flippa', hype: 'Hype', databas: 'Databas', statistik: 'Statistik', installningar: 'Inställningar' };
 function setMenu(open) {
   S.menuOpen = open; store.set('tk-menu', open);
   $('#drawer').hidden = !open;
@@ -1676,7 +1802,7 @@ function render() {
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === S.tab ? 'page' : 'false'));
   document.querySelectorAll('section[data-view]').forEach(s => { s.hidden = s.dataset.view !== S.tab; if (s.hidden) s.innerHTML = ''; });
   const active = document.activeElement && document.activeElement.id;
-  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, flippa: renderFlip, databas: renderDatabas, statistik: renderStats, installningar: renderSettings })[S.tab]();
+  ({ fynd: renderFynd, foto: renderFoto, lager: renderLager, flippa: renderFlip, hype: renderHype, databas: renderDatabas, statistik: renderStats, installningar: renderSettings })[S.tab]();
   renderSheet();
   if (active && !['q', 'price'].includes(active)) { const e = document.getElementById(active); if (e && e.focus) { e.focus(); try { const n = e.value.length; e.setSelectionRange(n, n); } catch {} } }
 }
