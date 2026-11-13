@@ -1340,7 +1340,7 @@ document.addEventListener('change', e => { if (e.target.dataset.flipall) { FS.al
 // ---------- vy: Hype (nya saker som säljs över nypris) ----------
 // data/hype.json (main): bevakade varor med nypris, varför och risker. hype/hype.json (grenen db): nattens sålda priser
 // för oanvända exemplar på Tradera, utropspriser på Blocket och listan "Hett just nu" som hittas automatiskt.
-const HS = { cfg: null, db: null, loading: false, err: null, view: store.get('tk-hypeview', 'bevakade'), cat: 'Alla', open: null, form: false };
+const HS = { bw: null, bwLoading: false, bwQ: '', bwAll: false, bwLimit: 40, cfg: null, db: null, loading: false, err: null, view: store.get('tk-hypeview', 'bevakade'), cat: 'Alla', open: null, form: false };
 async function loadHype(force) {
   if ((HS.cfg || HS.loading) && !force) return;
   HS.loading = true;
@@ -1348,6 +1348,49 @@ async function loadHype(force) {
   catch (e) { HS.err = e.message; }
   HS.loading = false; render();
 }
+async function loadBw() {
+  if (HS.bw || HS.bwLoading) return;
+  HS.bwLoading = true;
+  try { HS.bw = await readDbFile('blackweek/blackweek.json') || { items: [] }; } catch { HS.bw = { items: [] }; }
+  HS.bwLoading = false; render();
+}
+// Black Week: nya produkter som kostar mindre i butik (alla butiker på PriceRunner) än de säljs för oanvända på Tradera.
+function bwHTML() {
+  loadBw();
+  const d = HS.bw;
+  const intro = `<div class="note small">Varje natt: alla <b>oanvända</b> saker som sålts på Tradera senaste 30 dagarna kopplas till exakt produkt (namn och modellnummer), och lägsta pris i lager hos alla butiker på PriceRunner hämtas, med frakt. Black Week-sänkningar kommer med automatiskt. Säljpriset är försiktigt: priset minst hälften av försäljningarna nådde (90 % säkert vid minst 10 sålda, annars billigaste fjärdedelen).</div>`;
+  if (!d) return intro + '<div class="note">Laddar…</div>';
+  if (!d.items || !d.items.length) return intro + '<div class="note">Ingen skanning än. Den körs i natt.</div>';
+  const qn = norm(HS.bwQ);
+  const list = d.items.map(x => { const net = x.sold.resale - fee('tradera', x.sold.resale) - extraCost(); return { x, net, vd: verdict({ net, max: maxBuy(net) }, x.buy.p) }; })
+    .filter(o => o.vd && (HS.bwAll ? o.vd.profit > 0 : o.vd.cls === 'buy') && (!qn || norm(o.x.name + ' ' + o.x.cat).includes(qn)))
+    .sort((a, b) => b.vd.profit - a.vd.profit);
+  const head = `${intro}<div class="muted small">Uppdaterad ${when(d.updatedAt)} · ${d.traderaRows.toLocaleString('sv-SE')} oanvända sålda · ${d.matchedProducts.toLocaleString('sv-SE')} produkter kopplade · ${d.checked} butikspriser kollade</div>
+    <div class="quick"><div class="field"><label for="bwQ">Filtrera</label><input id="bwQ" data-bwq="1" type="search" value="${esc(HS.bwQ)}" placeholder="t.ex. lego, dyson, airpods" autocomplete="off"></div></div>
+    <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-bwall="1" ${HS.bwAll ? 'checked' : ''}> Visa allt med vinst, inte bara det som klarar regeln (${esc(ruleText())})</label>`;
+  if (!list.length) return head + '<div class="note">Inget som klarar regeln just nu.</div>';
+  return head + `<div class="flips">${list.slice(0, HS.bwLimit).map(({ x, net, vd }) => {
+    const open = HS.open === 'bw:' + x.u;
+    const body = open ? `<div class="flip-body">
+      <div class="kv">
+        <div><span>Köp billigast</span><b>${kr(x.buy.p)}</b><span>${esc(x.buy.store)} · med frakt · ${x.buy.stores} butiker${x.buy.campaign ? ' · kampanj' : ''}</span></div>
+        <div><span>Säljs oanvänd på Tradera</span><b>${kr(x.sold.resale)}</b><span>${x.sold.n} sålda 30 d · median ${kr(x.sold.med)}</span></div>
+        <div><span>Du får ut efter avgift</span><b>${kr(net)}</b><span>Tradera ${S.cfg.traderaPct} %</span></div>
+        <div><span>Vanligt butikspris</span><b>${kr(x.buy.median)}</b><span>median av alla butiker</span></div>
+      </div>
+      <div class="listings">${x.ex.map(([id, t, p, img]) => `<a class="listing" href="${esc(d.traderaUrl + id)}" target="_blank" rel="noopener">${img ? imgTag(esc(d.traderaImg + img)) : '<div class="ph"></div>'}<div class="p"><span class="src t">Såld</span><span class="num">${kr(p)}</span></div><div class="t muted">${esc(t)}</div></a>`).join('')}</div>
+      <div class="row"><a class="btn small primary" href="${esc(d.prUrl + x.u)}" target="_blank" rel="noopener">Alla butiker på PriceRunner ↗</a>${searchLinks(x.name)}</div>
+      <p class="muted small">Kolla att det är exakt samma modell och att butiken har den i lager. Sälj oöppnad.</p></div>` : '';
+    return `<div class="flip${open ? ' open' : ''}"><button class="flip-head" data-hypeopen="${esc('bw:' + x.u)}" aria-expanded="${open}">
+      <div class="flip-main"><div class="flip-name" style="text-transform:none">${esc(x.name)}</div>
+        <div class="hype-line">Köp <b>${kr(x.buy.p)}</b> <span>(${esc(x.buy.store)})</span> → säljs <b>${kr(x.sold.resale)}</b> <span>(${x.sold.n} sålda nya)</span></div>
+        <div class="meta"><span class="pill">${esc(x.cat)}</span>${x.buy.campaign ? '<span class="pill bw">Kampanj</span>' : ''}${x.buy.p < x.buy.median * 0.85 ? `<span class="pill bw">−${Math.round((1 - x.buy.p / x.buy.median) * 100)} % mot andra butiker</span>` : ''}</div></div>
+      <div class="flip-profit ${vd.cls} num">+${kr(vd.profit)}</div></button>${body}</div>`;
+  }).join('')}</div>${list.length > HS.bwLimit ? `<button class="btn" data-bwmore="1">Visa fler (${list.length - HS.bwLimit})</button>` : ''}`;
+}
+document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.bwq) { clearTimeout(HS.bwT); HS.bwT = setTimeout(() => { HS.bwQ = e.target.value.trim(); HS.bwLimit = 40; render(); }, 300); } });
+document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.bwall) { HS.bwAll = e.target.checked; render(); } });
+document.addEventListener('click', e => { if (e.target.closest('[data-bwmore]')) { HS.bwLimit += 40; render(); } });
 function hypeVal(it) {
   const d = HS.db && HS.db.items ? HS.db.items.find(x => x.id === it.id) : null;
   const t = d && d.t, b = d && d.b;
@@ -1427,7 +1470,7 @@ function renderHype() {
   const cats = ['Alla', ...new Set(items.map(i => i.cat))];
   const head = `<div class="panel"><div class="spread"><div><div class="lbl">Nytt som säljs över nypris${HS.db ? ' · priser ' + when(HS.db.updatedAt) : ''}</div><h2>Hype</h2></div>
       <button class="btn small" data-hypeform="1">${HS.form ? 'Stäng' : '+ Bevaka'}</button></div>
-    <div class="chips" role="group" aria-label="Visa">${[['bevakade', 'Bevakade'], ['begransad', 'Begränsade'], ['hett', 'Hett just nu']].map(([k, l]) => `<button class="chip" data-hypeview="${k}" aria-pressed="${HS.view === k}">${l}</button>`).join('')}</div>
+    <div class="chips" role="group" aria-label="Visa">${[['bw', 'Black Week'], ['bevakade', 'Bevakade'], ['begransad', 'Begränsade'], ['hett', 'Hett just nu']].map(([k, l]) => `<button class="chip" data-hypeview="${k}" aria-pressed="${HS.view === k}">${l}</button>`).join('')}</div>
     ${HS.form ? `<form id="hypeForm" class="form-grid" style="border-top:1px solid var(--line);padding-top:14px">
       <div class="field" style="grid-column:1/-1"><label for="h-name">Vara</label><input id="h-name" type="text" required placeholder="t.ex. PS5 Pro 30th Anniversary"></div>
       <div class="field"><label for="h-retail">Nypris (kr)</label><input id="h-retail" type="number" inputmode="numeric" min="0"></div>
@@ -1439,6 +1482,7 @@ function renderHype() {
   if (HS.loading && !c) { el.innerHTML = head + '<div class="note">Laddar…</div>'; return; }
   if (HS.err) { el.innerHTML = head + `<div class="note bad">Kunde inte läsa listan: ${esc(HS.err)}</div>`; return; }
   if (HS.view === 'hett') { el.innerHTML = head + hotHTML(); return; }
+  if (HS.view === 'bw') { el.innerHTML = head + bwHTML(); return; }
   const limView = HS.view === 'begransad';
   const list = items.filter(i => (HS.cat === 'Alla' || i.cat === HS.cat) && (!limView || i.limited)).map(i => ({ i, v: hypeVal(i) }))
     .sort(limView ? (a, b) => ((a.i.limited.until || '9999') < (b.i.limited.until || '9999') ? -1 : (a.i.limited.until || '9999') > (b.i.limited.until || '9999') ? 1 : 0)

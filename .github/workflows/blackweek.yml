@@ -1,0 +1,50 @@
+name: Black Week
+
+# Nya varor som kostar mindre i butik än de säljs för oanvända på Tradera (scripts/blackweek.py).
+# Körs två gånger om dagen så att Black Week-sänkningar kommer med samma dag.
+# Samma kö som Databas, så att de inte skriver över varandras grenen db.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7 6,15 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: databas
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hämta databasen
+        run: |
+          mkdir -p dbdata
+          git fetch --depth=1 origin db
+          git archive --format=tar FETCH_HEAD | tar -xf - -C dbdata
+      # PriceRunners sitemaps (produktnamn) ändras långsamt: sparas en vecka.
+      - uses: actions/cache@v4
+        with:
+          path: sitemaps
+          key: pr-sitemaps-${{ github.run_id }}
+          restore-keys: pr-sitemaps-
+      - name: Rensa sitemaps äldre än en vecka
+        run: find sitemaps -name '*.txt' -mtime +7 -delete 2>/dev/null || true
+      - name: Skanna
+        run: python3 scripts/blackweek.py --db dbdata --cache sitemaps
+      - name: Spara på grenen db
+        run: |
+          git config user.name "thriftkollen-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin db
+          export GIT_INDEX_FILE="$RUNNER_TEMP/idx"
+          git read-tree FETCH_HEAD
+          git --work-tree=dbdata add -f blackweek/blackweek.json
+          tree=$(git write-tree)
+          commit=$(git commit-tree "$tree" -p FETCH_HEAD -m "Black Week $(date -u +%F' '%H:%M)")
+          git push origin "$commit:refs/heads/db"

@@ -92,6 +92,20 @@ Knappen **Hype** bredvid Flippa. Två listor:
 - **Frakt:** under Dina regler väljer du förpackningskostnad och om du bjuder på frakten. Flippa vet vad frakten brukar kosta per varutyp.
 - **Vakt:** om nattens databaskörning inte har gått (GitHub tappar ibland schemalagda körningar) startar appen den när du öppnar den inloggad.
 
+### Black Week: köp nytt i butik, sälj dyrare på Tradera
+
+`scripts/blackweek.py` (Python, bara standardbiblioteket) körs av `.github/workflows/blackweek.yml` två gånger om dagen.
+
+1. Utgår från **efterfrågan**: alla oanvända saker som sålts på Tradera senaste 30 dagarna.
+2. Kopplar varje försäljning till exakt produkt hos PriceRunner via deras sitemap (namn och modellnummer måste stämma).
+3. Läser produktsidan: alla butikers pris just nu med frakt och lager (Power, NetOnNet, Elgiganten, Jysk, Webhallen,
+   Proshop med flera). Black Week-sänkningar kommer med automatiskt.
+4. Vinst = försiktigt säljpris (nedre 90 %-gränsen för medianen vid minst 10 sålda, annars billigaste fjärdedelen)
+   minus Tradera-avgift minus lägsta butikspris. Visas under Hype → Black Week.
+
+Hämtar bara det robots.txt tillåter (sitemap och produktsidor, inte sök- eller rea-listor), långsamt och med ärlig
+User-Agent. Butiker som blockerar automatiska anrop (Elgiganten, NetOnNet, Inet) kommer ändå med via PriceRunner.
+
 ### Fotoflödet
 
 1. Du tar en bild i appen och skriver valfritt vad det är.
