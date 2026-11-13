@@ -135,6 +135,8 @@ textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); borde
 .pill.fast { background: var(--good-bg); color: var(--good); }
 .pill.mid { background: var(--warn-bg); color: var(--warn); }
 .pill.slow { background: var(--bad-bg); color: var(--bad); }
+.pill.lim { background: #3A1F47; color: #E9A8FF; }
+.pill.bw { background: #0F2E33; color: #6FE0E8; }
 .prices { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
 .sells { display: grid; font-size: .8rem; color: var(--muted); }
 .sells b { font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); font-stretch: 90%; }
@@ -1350,9 +1352,10 @@ function hypeVal(it) {
   const d = HS.db && HS.db.items ? HS.db.items.find(x => x.id === it.id) : null;
   const t = d && d.t, b = d && d.b;
   const sold = t && t.n >= 3 ? t.med : null;
-  if (sold == null || !it.retail) return { d, t, b, sold, vd: null };
+  const buy = it.bw && it.bw.price ? it.bw.price : it.retail;
+  if (sold == null || !buy) return { d, t, b, sold, buy, vd: null };
   const net = sold - fee('tradera', sold) - extraCost();
-  return { d, t, b, sold, net, vd: verdict({ net, max: maxBuy(net) }, it.retail) };
+  return { d, t, b, sold, buy, net, vd: verdict({ net, max: maxBuy(net) }, buy) };
 }
 function hypeSpark(hist) {
   const h = (hist || []).filter(r => r[1] > 0); if (h.length < 2) return '';
@@ -1361,15 +1364,30 @@ function hypeSpark(hist) {
   const up = h[h.length - 1][1] >= h[0][1];
   return `<span class="row small muted"><svg width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--${up ? 'good' : 'bad'})" stroke-width="2"/></svg>${up ? 'stiger' : 'faller'} senaste ${h.length} dagarna</span>`;
 }
+// Begränsad: säljs bara till ett visst datum (pensioneras, Black Friday, säsong) eller i begränsad upplaga.
+const daysTo = iso => iso ? Math.ceil((new Date(iso + 'T23:59:59') - Date.now()) / 864e5) : null;
+function limPill(it) {
+  const l = it.limited; if (!l) return '';
+  const d = daysTo(l.until);
+  const when = l.until ? (d < 0 ? ' · slut' : d === 0 ? ' · sista dagen' : ` · ${d} d kvar`) : '';
+  return `<span class="pill lim" title="${esc(l.note || '')}">${/^begränsad/i.test(l.kind) ? esc(l.kind) : 'Begränsad · ' + esc(l.kind)}${when}</span>`;
+}
+function bwPill(it) {
+  const w = it.bw; if (!w || !w.list || w.price >= w.list) return '';
+  return `<span class="pill bw">Black Week −${Math.round((1 - w.price / w.list) * 100)} %</span>`;
+}
 function hypeCard(it) {
   const v = hypeVal(it), open = HS.open === it.id;
   const profit = v.vd ? `<div class="flip-profit ${v.vd.cls} num">${v.vd.profit >= 0 ? '+' : ''}${kr(v.vd.profit)}</div>` : `<div class="flip-profit num">${v.sold ? '' : '–'}</div>`;
-  const line = `${it.retail ? `Nypris ${it.approx ? 'ca ' : ''}<b>${kr(it.retail)}</b>` : 'Nypris varierar'} → ${v.sold ? `säljs för <b>${kr(v.sold)}</b> <span>(${v.t.n} sålda oanvända på Tradera)</span>` : '<span>inga sålda oanvända på Tradera än</span>'}`;
+  const bwOk = it.bw && it.bw.list && it.bw.price < it.bw.list;
+  const line = `${it.bw && it.bw.price ? `${bwOk ? 'Köp' : 'Nu billigast'} <b>${kr(it.bw.price)}</b> <span>(${[esc(it.bw.store), it.bw.list ? 'ord. ' + kr(it.bw.list) : ''].filter(Boolean).join(', ')})</span>` : it.retail ? `Nypris ${it.approx ? 'ca ' : ''}<b>${kr(it.retail)}</b>` : 'Nypris varierar'} → ${v.sold ? `säljs för <b>${kr(v.sold)}</b> <span>(${v.t.n} sålda oanvända på Tradera)</span>` : '<span>inga sålda oanvända på Tradera än</span>'}`;
   let body = '';
   if (open) {
     const list = v.d && v.d.list ? v.d.list : [];
     body = `<div class="flip-body">
       <p class="small">${esc(it.why)}</p>
+      ${it.limited ? `<div class="note small"><b>Begränsad (${esc(it.limited.kind)}${it.limited.until ? ', till ' + esc(it.limited.until) : ''}):</b> ${esc(it.limited.note || '')}</div>` : ''}
+      ${it.bw ? `<div class="note small"><b>Black Week-koll ${esc(it.bw.checked || '')}:</b> billigast ${kr(it.bw.price)}${it.bw.store ? ' hos ' + esc(it.bw.store) : ''}${it.bw.list ? `, ordinarie ${kr(it.bw.list)}` : ''}. ${esc(it.bw.note || '')} ${it.bw.u ? `<a href="${esc(it.bw.u)}" target="_blank" rel="noopener">Se alla butiker ↗</a>` : ''}</div>` : ''}
       <div class="note warn small"><b>Risk:</b> ${esc(it.risk)}</div>
       <div class="kv">
         <div><span>Tradera, sålda oanvända</span><b>${v.t ? kr(v.t.med) : '–'}</b><span>${v.t ? `${v.t.n} st · ${kr(v.t.p25)}–${kr(v.t.p75)}` : 'ingen data'}</span></div>
@@ -1387,7 +1405,7 @@ function hypeCard(it) {
     <button class="flip-head" data-hypeopen="${esc(it.id)}" aria-expanded="${open}">
       <div class="flip-main"><div class="flip-name" style="text-transform:none">${esc(it.name)}</div>
         <div class="hype-line">${line}</div>
-        <div class="meta"><span class="pill">${esc(it.cat)}</span>${it.status ? `<span class="pill ${/slut|brist|pensioneras|släpps/i.test(it.status) ? 'mid' : /svalnar/i.test(it.status) ? 'slow' : ''}">${esc(it.status)}${it.date && /släpps|pensioneras/i.test(it.status) ? '' : ''}</span>` : ''}</div></div>
+        <div class="meta">${limPill(it)}${bwPill(it)}<span class="pill">${esc(it.cat)}</span>${it.status ? `<span class="pill ${/slut|brist|pensioneras|släpps/i.test(it.status) ? 'mid' : /svalnar/i.test(it.status) ? 'slow' : ''}">${esc(it.status)}${it.date && /släpps|pensioneras/i.test(it.status) ? '' : ''}</span>` : ''}</div></div>
       ${profit}
     </button>${body}</div>`;
 }
@@ -1409,7 +1427,7 @@ function renderHype() {
   const cats = ['Alla', ...new Set(items.map(i => i.cat))];
   const head = `<div class="panel"><div class="spread"><div><div class="lbl">Nytt som säljs över nypris${HS.db ? ' · priser ' + when(HS.db.updatedAt) : ''}</div><h2>Hype</h2></div>
       <button class="btn small" data-hypeform="1">${HS.form ? 'Stäng' : '+ Bevaka'}</button></div>
-    <div class="chips" role="group" aria-label="Visa">${[['bevakade', 'Bevakade'], ['hett', 'Hett just nu']].map(([k, l]) => `<button class="chip" data-hypeview="${k}" aria-pressed="${HS.view === k}">${l}</button>`).join('')}</div>
+    <div class="chips" role="group" aria-label="Visa">${[['bevakade', 'Bevakade'], ['begransad', 'Begränsade'], ['hett', 'Hett just nu']].map(([k, l]) => `<button class="chip" data-hypeview="${k}" aria-pressed="${HS.view === k}">${l}</button>`).join('')}</div>
     ${HS.form ? `<form id="hypeForm" class="form-grid" style="border-top:1px solid var(--line);padding-top:14px">
       <div class="field" style="grid-column:1/-1"><label for="h-name">Vara</label><input id="h-name" type="text" required placeholder="t.ex. PS5 Pro 30th Anniversary"></div>
       <div class="field"><label for="h-retail">Nypris (kr)</label><input id="h-retail" type="number" inputmode="numeric" min="0"></div>
@@ -1421,11 +1439,15 @@ function renderHype() {
   if (HS.loading && !c) { el.innerHTML = head + '<div class="note">Laddar…</div>'; return; }
   if (HS.err) { el.innerHTML = head + `<div class="note bad">Kunde inte läsa listan: ${esc(HS.err)}</div>`; return; }
   if (HS.view === 'hett') { el.innerHTML = head + hotHTML(); return; }
-  const list = items.filter(i => HS.cat === 'Alla' || i.cat === HS.cat).map(i => ({ i, v: hypeVal(i) }))
-    .sort((a, b) => (b.v.vd ? b.v.vd.profit : -1e9) - (a.v.vd ? a.v.vd.profit : -1e9));
+  const limView = HS.view === 'begransad';
+  const list = items.filter(i => (HS.cat === 'Alla' || i.cat === HS.cat) && (!limView || i.limited)).map(i => ({ i, v: hypeVal(i) }))
+    .sort(limView ? (a, b) => ((a.i.limited.until || '9999') < (b.i.limited.until || '9999') ? -1 : (a.i.limited.until || '9999') > (b.i.limited.until || '9999') ? 1 : 0)
+      : (a, b) => (b.v.vd ? b.v.vd.profit : -1e9) - (a.v.vd ? a.v.vd.profit : -1e9));
+  const bwk = c && c.blackWeek;
+  const limNote = limView ? `<div class="note small">Saker som bara går att köpa till ett visst datum: set som LEGO slutar sälja vid nyår, Black Friday-släpp och julkollektioner. Sorterat på vad som tar slut först.${bwk ? ` Black Week ${bwk.from.slice(8)}–${bwk.to.slice(8)} nov, Black Friday ${bwk.blackFriday.slice(8)} nov. ${esc(bwk.note || '')}` : ''}</div>` : '';
   const tips = c && c.tips ? `<details class="panel how"><summary>Så tjänar man på hype (och vad man inte får göra)</summary>${c.tips.map(([h, t]) => `<p class="small"><b>${esc(h)}.</b> <span class="muted">${esc(t)}</span></p>`).join('')}</details>` : '';
   el.innerHTML = head + `<div class="chips" role="group" aria-label="Kategori">${cats.map(x => `<button class="chip" data-hypecat="${esc(x)}" aria-pressed="${HS.cat === x}">${esc(x)}</button>`).join('')}</div>
-    <div class="muted small">Sorterat på vinst efter Tradera-avgift om du köper till nypris och säljer oanvänt. Regel: ${ruleText()}. Nypriser är ungefärliga, kolla butiken.</div>
+    ${limNote}<div class="muted small">${limView ? '' : 'Sorterat på vinst efter Tradera-avgift om du köper till nypris (eller Black Week-pris) och säljer oanvänt. '} Regel: ${ruleText()}. Nypriser är ungefärliga, kolla butiken.</div>
     <div class="flips">${list.map(o => hypeCard(o.i)).join('')}</div>${tips}`;
 }
 document.addEventListener('click', e => {
