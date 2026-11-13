@@ -272,7 +272,7 @@ function trendFor(list) {
 
 // ---------- räknare och färger ----------
 function countUp(el, to, f = fmt) {
-  if (REDUCED || to == null || !isFinite(to)) { el.textContent = f(to); return; }
+  if (REDUCED || document.hidden || to == null || !isFinite(to)) { el.textContent = f(to); return; }   // dold flik: ingen animation, visa värdet direkt
   const t0 = performance.now(), dur = 900;
   const step = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = f(to * e); if (k < 1) requestAnimationFrame(step); else el.textContent = f(to); };
   requestAnimationFrame(step);
