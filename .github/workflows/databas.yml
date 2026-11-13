@@ -18,9 +18,9 @@ on:
     branches: [main]
     paths:
       - 'data/bevakningar.json'
-  # Varje natt kl 04 svensk tid: följer prisändringar och vilka annonser som försvinner (säljs).
+  # Varje natt ca kl 03:20 svensk tid. Udda minut: GitHub tappar ofta schemalagda körningar på jämna klockslag.
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '17 2 * * *'
 
 permissions:
   contents: write

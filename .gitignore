@@ -1,1 +1,8 @@
 dbdata/
+
+# Ligger på grenen data (se scrape.yml)
+data/thriftdata.json
+data/fynd.json
+data/sokord.json
+queue/
+uploads/

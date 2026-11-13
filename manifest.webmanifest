@@ -1,0 +1,20 @@
+{
+  "name": "Thriftkollen",
+  "short_name": "Thriftkollen",
+  "description": "Vad saker säljs för på Blocket och Tradera, direkt i butiken.",
+  "lang": "sv",
+  "start_url": "./#fynd",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E1115",
+  "theme_color": "#161A20",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Fota", "url": "./#foto", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Flippa", "url": "./#flippa", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -8,6 +8,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Thriftkollen">
 <title>Thriftkollen</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Thriftkollen">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Inter:wght@400;500;600&display=swap">
@@ -94,6 +100,21 @@ nav.tabs a.ext { color: var(--tag); border-color: color-mix(in srgb, var(--tag) 
 .watch.big { border-color: color-mix(in srgb, var(--tag) 45%, var(--line)); }
 .watch.big b::before { content: "★ "; color: var(--tag); }
 .sub-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+/* Träffar i stora databasen (sök och direktsvar) */
+.db-hits { display: grid; gap: 8px; }
+.db-hit { display: flex; justify-content: space-between; gap: 12px; align-items: center; text-align: left; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.db-hit:hover { border-color: var(--muted); }
+.db-hit-main { display: grid; gap: 4px; min-width: 0; }
+.db-hit-main b { text-transform: capitalize; overflow-wrap: anywhere; }
+.db-hit-p { display: grid; justify-items: end; text-align: right; flex: 0 0 auto; }
+.db-hit-p b { font-family: var(--font-display); font-size: 1.2rem; font-stretch: 88%; }
+.instant { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: start; padding-top: 14px; border-top: 1px solid var(--line); }
+.instant:first-of-type { border-top: 0; padding-top: 0; }
+.instant .photo { width: 88px; aspect-ratio: 1; object-fit: cover; border-radius: 10px; }
+.instant .fynd { display: grid; gap: 10px; min-width: 0; }
+.instant h3 { font-size: 1.15rem; text-transform: none; }
+.own-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 15px; line-height: 1.45; resize: vertical; }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 18px; display: grid; gap: 16px; min-width: 0; }
 .note { padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); font-size: .92rem; }
@@ -305,7 +326,8 @@ details.how p { margin: 8px 0 0; }
 'use strict';
 const CATS = ['Möbler & stolar', 'Porslin & glas', 'Elektronik & retro', 'Kläder & märken', 'Barn & fritid', 'Övrigt'];
 const DEFAULT_CFG = { minProfit: 100, minMult: 2, mode: 'any', valuation: 'bal', platform: 'tradera',
-  traderaPct: 10, traderaMin: 3, traderaCap: 200, blocketFee: 0, haggle: 20 };
+  traderaPct: 10, traderaMin: 3, traderaCap: 200, blocketFee: 0, haggle: 20,
+  packCost: 0, payShip: false, shipCost: 59 };   // frakt: förpackning per försäljning, och om du själv betalar frakten
 const TABS = ['fynd', 'foto', 'lager', 'flippa', 'databas', 'statistik', 'installningar'];
 
 // ---------- lagring på enheten ----------
@@ -345,7 +367,10 @@ const safeImg = u => /^https:\/\/(images\.blocketcdn\.se|img\.tradera\.net)\//.t
 const daysAgo = iso => { const d = (Date.now() - new Date(iso)) / 864e5; return isFinite(d) ? d : null; };
 const when = iso => { const d = daysAgo(iso); if (d == null) return '–'; if (d < 1 / 24) return Math.max(1, Math.round(d * 1440)) + ' min sedan'; if (d < 1) return Math.round(d * 24) + ' h sedan'; return Math.round(d) + ' d sedan'; };
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3200); }
-const rawUrl = path => `https://raw.githubusercontent.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/${gh.branch}/${path}`;
+// Data som ändras ofta (scrape, foton, sökord) ligger på grenen "data", så att varje foto inte bygger om hela sidan.
+const DATA_BRANCH = 'data';
+const branchFor = path => /^(data\/(thriftdata|fynd|sokord)\.json|queue\/|uploads\/)/.test(path) ? DATA_BRANCH : gh.branch;
+const rawUrl = path => `https://raw.githubusercontent.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/${branchFor(path)}/${path}`;
 const b64 = str => { const bytes = new TextEncoder().encode(str); let s = ''; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s); };
 const fromB64 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
 
@@ -364,7 +389,7 @@ async function api(path, opts = {}) {
 const repoPath = p => `/repos/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}${p}`;
 async function readRepoJson(path) {
   if (gh.token && gh.owner) {
-    try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=${gh.branch}`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; }
+    try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=${branchFor(path)}`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; }
   }
   let r = null;
   if (gh.owner) { try { r = await fetch(rawUrl(path), { cache: 'no-store' }); if (!r.ok && r.status !== 404) r = null; } catch { r = null; } }
@@ -374,11 +399,11 @@ async function readRepoJson(path) {
   return r.json();
 }
 async function putFile(path, contentB64, message, sha) {
-  return api(repoPath(`/contents/${path}`), { method: 'PUT', body: { message, content: contentB64, branch: gh.branch, ...(sha ? { sha } : {}) } });
+  return api(repoPath(`/contents/${path}`), { method: 'PUT', body: { message, content: contentB64, branch: branchFor(path), ...(sha ? { sha } : {}) } });
 }
 async function updateRepoJson(path, mutate, message) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const cur = await api(repoPath(`/contents/${path}?ref=${gh.branch}`));
+    const cur = await api(repoPath(`/contents/${path}?ref=${branchFor(path)}`));
     const data = JSON.parse(fromB64(cur.content));
     const next = mutate(data);
     try { return await putFile(path, b64(JSON.stringify(next, null, 1)), message, cur.sha); }
@@ -386,8 +411,9 @@ async function updateRepoJson(path, mutate, message) {
   }
   throw new Error('Filen ändrades samtidigt. Försök igen.');
 }
-async function dispatchScrape() {
-  await api(repoPath('/actions/workflows/scrape.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { full: true } } });
+// full = alla sökord, annars bara nya foton i kön.
+async function dispatchScrape(full = true) {
+  await api(repoPath('/actions/workflows/scrape.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { full } } });
 }
 async function dispatchDb(id) {
   await api(repoPath('/actions/workflows/databas.yml/dispatches'), { method: 'POST', body: { ref: gh.branch, inputs: { bevakning: id } } });
@@ -435,9 +461,11 @@ function valuation(t) {
   if (S.cfg.valuation === 'safe') resale = tv ?? bv;
   else if (S.cfg.valuation === 'opt') resale = Math.max(...vals);
   else resale = vals.reduce((a, b) => a + b, 0) / vals.length;
-  const net = resale - fee(S.cfg.platform, resale);
+  const net = resale - fee(S.cfg.platform, resale) - extraCost();
   return { resale, net, tv, bv, max: maxBuy(net) };
 }
+// Egna kostnader per försäljning: förpackning, och frakten om du bjuder på den (annars betalar köparen).
+function extraCost(ship) { const c = S.cfg; return (+c.packCost || 0) + (c.payShip ? (ship || +c.shipCost || 0) : 0); }
 function maxBuy(net) {
   const a = net - S.cfg.minProfit, b = net / S.cfg.minMult;
   const v = S.cfg.mode === 'all' ? Math.min(a, b) : Math.max(a, b);
@@ -529,7 +557,7 @@ function renderFynd() {
         </select></div>
     </div>
     ${S.price != null ? `<div class="note">Visar köpbesked för butikspris <b class="num">${kr(S.price)}</b>. Kravet är ${ruleText()}.</div>` : ''}
-    ${fallback}${hint}
+    ${S.q ? dbSearchHTML(S.q) : ''}${fallback}${hint}
     <div class="grid">${list.map(cardHTML).join('')}</div>`;
 }
 function ruleText() { const c = S.cfg; return `minst ${kr(c.minProfit)} vinst${c.mode === 'all' ? ' och ' : ' eller '}x${c.minMult} efter avgifter`; }
@@ -624,7 +652,7 @@ function fyndHTML(f) {
       <div class="field" style="max-width:11rem"><label for="fp-${esc(f.id)}">Pris i butiken</label><input id="fp-${esc(f.id)}" data-fprice="${esc(f.id)}" type="number" inputmode="numeric" min="0" step="5" value="${S.fyndPrice[f.id] ?? ''}" placeholder="kr"></div>
     </div></div>
     <div class="compare">${cmpHTML(f, 's', f.specific, 'Samma märke/modell')}${cmpHTML(f, 'g', f.generic, 'Varutypen i stort')}</div>
-    <div class="row"><button class="btn small" data-buy="${esc(ai.name || f.text || '')}" data-buyprice="${esc(f.id)}">Köpt! Lägg i lager</button>${retry}${searchLinks(ai.specificQuery || f.text || '')}</div>
+    <div class="row"><button class="btn small" data-buy="${esc(ai.name || f.text || '')}" data-buyprice="${esc(f.id)}">Köpt! Lägg i lager</button><button class="btn small" data-ad="f:${esc(f.id)}">Skriv annons</button>${retry}${searchLinks(ai.specificQuery || f.text || '')}</div>
   </div>`;
 }
 const MAX_BATCH = 20;
@@ -651,9 +679,10 @@ function renderFoto() {
           <button class="btn primary" type="submit" ${S.uploading || !ready ? 'disabled' : ''}>${S.uploading ? 'Skickar…' : `Skicka ${ps.length} ${ps.length === 1 ? 'foto' : 'foton'} och scrapa`}</button>
           <button class="btn" type="button" data-photo="clear">Rensa</button>
         </form>
-        <p class="muted small">Ett foto per sak. Kostar ungefär ${(ps.length * 0.12).toLocaleString('sv-SE', { maximumFractionDigits: 1 })} kr i bildigenkänning och tar ungefär ${Math.max(2, Math.round(1.5 + ps.length * 0.4))} minuter.</p>` : ''}
+        <p class="muted small">Ett foto per sak. Kostar ungefär ${(ps.length * 0.12).toLocaleString('sv-SE', { maximumFractionDigits: 1 })} kr i bildigenkänning. ${vault.c ? 'Svar ur databasen direkt, och en full scrape på GitHub inom ett par minuter.' : `Tar ungefär ${Math.max(2, Math.round(1.5 + ps.length * 0.4))} minuter. Lägg in en Claude-nyckel på kontot för svar direkt.`}</p>` : ''}
       <p class="muted small">Upp till ${MAX_BATCH} foton i taget, ett per sak. Claude känner igen varje sak och scrapar både samma märke och varutypen i stort. Varutypen hamnar också i katalogen och uppdateras vid varje full scrape.</p>
     </div>
+    ${instantHTML()}
     ${S.pending.length ? `<div class="panel"><div class="spread"><h3>Scrapas just nu</h3>${run}</div>
       ${S.pending.map(x => `<div class="shot">${x.thumb ? `<img class="photo" src="${x.thumb}" alt="">` : ''}<div class="fynd"><div class="row"><span class="spinner"></span><b>${esc(x.text || 'Foto utan text')}</b></div>
       <div class="muted small">Skickat ${when(x.createdAt)}. Sidan uppdateras själv.</div></div></div>`).join('')}</div>` : ''}
@@ -678,14 +707,14 @@ async function onPhotosChosen(files) {
   render();
 }
 // Lägger upp flera filer i en enda commit (Git Data API), så att GitHub bara startar en körning för hela omgången.
-async function commitFiles(files, message) {
+async function commitFiles(files, message, branch = DATA_BRANCH) {
   for (const f of files) if (!f.blob) f.blob = (await api(repoPath('/git/blobs'), { method: 'POST', body: { content: f.b64, encoding: 'base64' } })).sha;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const ref = await api(repoPath(`/git/ref/heads/${gh.branch}`));
+    const ref = await api(repoPath(`/git/ref/heads/${branch}`));
     const base = await api(repoPath(`/git/commits/${ref.object.sha}`));
     const tree = await api(repoPath('/git/trees'), { method: 'POST', body: { base_tree: base.tree.sha, tree: files.map(f => ({ path: f.path, mode: '100644', type: 'blob', sha: f.blob })) } });
     const commit = await api(repoPath('/git/commits'), { method: 'POST', body: { message, tree: tree.sha, parents: [ref.object.sha] } });
-    try { await api(repoPath(`/git/refs/heads/${gh.branch}`), { method: 'PATCH', body: { sha: commit.sha, force: false } }); return commit; }
+    try { await api(repoPath(`/git/refs/heads/${branch}`), { method: 'PATCH', body: { sha: commit.sha, force: false } }); return commit; }
     catch (e) { if (e.status !== 422 && e.status !== 409) throw e; }
   }
   throw new Error('Repot ändrades samtidigt. Försök igen.');
@@ -703,8 +732,23 @@ async function sendPhotos() {
       files.push({ path: job.image, b64: p.url.split(',')[1] }, { path: `queue/${id}.json`, b64: b64(JSON.stringify(job)) });
       jobs.push({ id, createdAt: job.createdAt, text: job.text, thumb: p.thumb });
     });
+    // Med Claude-nyckel: känn igen alla foton direkt i mobilen (4 åt gången) och visa svar ur databasen medan GitHub scrapar.
+    if (vault.c) {
+      loadKTerms();
+      const inst = jobs.map((j, i) => ({ id: j.id, at: j.createdAt, thumb: j.thumb, text: j.text, photo: `uploads/${j.id}.jpg`, status: 'working', url: ps[i].url, cat: S.photoCat }));
+      S.instant = [...inst, ...S.instant].slice(0, 20); S.tab === 'foto' && render();
+      await runWithLimit(inst, 4, async x => {
+        try { x.ai = await identifyPhoto(x.url, x.text, x.cat); x.status = 'done'; }
+        catch (e) { x.status = 'error'; x.err = 'Bildigenkänningen misslyckades: ' + e.message + '. GitHub försöker igen.'; }
+        render();
+      });
+      saveInstant();
+      // Svaret följer med till GitHub, så att det inte kostar en gång till där.
+      inst.forEach(x => { if (x.ai) { const f = files.find(y => y.path === `queue/${x.id}.json`); const job = JSON.parse(fromB64(f.b64)); job.ai = x.ai; f.b64 = b64(JSON.stringify(job)); } });
+    }
     const texts = jobs.map(j => j.text).filter(Boolean);
     await commitFiles(files, `Scrapa ${jobs.length} ${jobs.length === 1 ? 'foto' : 'foton'}${texts.length ? ': ' + texts.slice(0, 3).join(', ') : ''}`);
+    await dispatchScrape(false).catch(() => {});   // datagrenen har ingen push-trigger, så vi startar körningen själva
     S.pending = [...jobs, ...S.pending]; store.set('tk-pending', S.pending);
     S.photos = []; toast(`${jobs.length} ${jobs.length === 1 ? 'foto' : 'foton'} skickade. Scrapen startar på GitHub.`);
     schedulePoll();
@@ -713,8 +757,311 @@ async function sendPhotos() {
   } finally { S.uploading = false; render(); }
 }
 
+// =====================================================================
+// ---------- valv: nycklar på kontot ----------
+// data/konto.json innehåller {t: GitHub-nyckel, c: Claude-nyckel, d: lagernyckel}, krypterat med ditt lösenord.
+// Äldre konton innehåller bara GitHub-nyckeln; de uppgraderas när du sparar lösenordet en gång till.
+const vaultStore = {
+  get() { try { return JSON.parse(localStorage.getItem('tk-vault') || sessionStorage.getItem('tk-vault') || '{}') || {}; } catch { return {}; } },
+  set(v, remember) { try { localStorage.removeItem('tk-vault'); sessionStorage.removeItem('tk-vault'); if (v && (v.c || v.d)) (remember ? localStorage : sessionStorage).setItem('tk-vault', JSON.stringify({ c: v.c || '', d: v.d || '' })); } catch {} },
+};
+let vault = vaultStore.get();
+async function openVault(blob, pass) {
+  const s = await openToken(blob, pass);
+  if (s.startsWith('{')) { const o = JSON.parse(s); return { t: o.t || '', c: o.c || '', d: o.d || '' }; }
+  return { t: s, c: '', d: '' };
+}
+
+// ---------- Claude direkt från mobilen ----------
+// Bildigenkänning på några sekunder i stället för att vänta på GitHub. Samma modell och fråga som scripts/process-queue.ps1.
+const AI_MODEL = 'claude-sonnet-5-5', USD_SEK = 10.5;
+const AI_PRICE = { 'claude-sonnet-5-5': [2, 10], 'claude-sonnet-5': [2, 10], 'claude-opus-5-5': [4, 20], 'claude-haiku-5-5': [0.1, 0.5] };
+async function claude(body) {
+  if (!vault.c) throw new Error('Ingen Claude-nyckel på kontot.');
+  const send = async (b, beta) => {
+    const h = { 'content-type': 'application/json', 'x-api-key': vault.c, 'anthropic-version': '2026-10-21', 'anthropic-dangerous-direct-browser-access': 'true' };
+    if (beta) h['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: h, body: JSON.stringify(b) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error((j.error && j.error.message) || 'HTTP ' + r.status); e.status = r.status; throw e; }
+    return j;
+  };
+  try { return await send({ ...body, fallbacks: 'default' }, true); }
+  catch (e) { if (!/fallback|beta/i.test(e.message)) throw e; return send(body, false); }   // utan reservmodell om den inte godtas
+}
+function aiCost(r) {
+  const p = AI_PRICE[r.model] || AI_PRICE[AI_MODEL], u = r.usage || {};
+  const inT = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), outT = u.output_tokens || 0, usd = (inT * p[0] + outT * p[1]) / 1e6;
+  return { input: inT, output: outT, usd: +usd.toFixed(5), sek: +(usd * USD_SEK).toFixed(3) };
+}
+function aiJson(r) {
+  if (r.stop_reason === 'refusal') throw new Error('Claude avböjde.');
+  const t = (r.content || []).find(c => c.type === 'text'); if (!t) throw new Error('Tomt svar från Claude.');
+  return JSON.parse(t.text);
+}
+const ID_SCHEMA = { type: 'object', additionalProperties: false,
+  required: ['name', 'brand', 'model', 'category', 'specificQuery', 'specificMust', 'genericQuery', 'genericMust', 'notes', 'confidence'],
+  properties: { name: { type: 'string' }, brand: { type: 'string' }, model: { type: 'string' }, category: { type: 'string', enum: CATS },
+    specificQuery: { type: 'string' }, specificMust: { type: 'string' }, genericQuery: { type: 'string' }, genericMust: { type: 'string' },
+    notes: { type: 'string' }, confidence: { type: 'string', enum: ['low', 'medium', 'high'] } } };
+async function identifyPhoto(dataUrl, text, cat) {
+  const hint = (text ? `Användaren beskriver varan så här: "${text}".` : 'Användaren har inte skrivit någon beskrivning.') + (cat ? ` Användaren tror att kategorin är: ${cat}.` : '');
+  const prompt = `Du hjälper en person i Stockholm som köper saker på en second hand-butik och säljer dem vidare på Blocket och Tradera.
+Identifiera varan på bilden så att vi kan söka fram jämförbara annonser. ${hint}
+
+Fält:
+- name: kort svenskt namn på varan, med märke och modell om de syns (t.ex. "Thule Yepp Maxi barncykelstol").
+- brand och model: tom sträng om det inte går att avgöra. Gissa inte fram en modell.
+- category: välj en av: ${CATS.join(', ')}.
+- specificQuery: 2-4 ord som hittar samma märke/modell på Blocket och Tradera, skrivet som svenska säljare skriver annonsrubriker. Om märket är okänt: samma som genericQuery.
+- specificMust: 1-2 ord som måste stå i annonsrubriken (oftast märket), mellanslagsseparerade. '*' om inget krav.
+- genericQuery: 1-3 ord för varutypen i stort på svenska, som det skrivs i annonser (t.ex. "barncykelstol"), för att jämföra prisnivån mellan märken.
+- genericMust: ett ord som måste stå i rubriken, eller '*' om rubrikerna varierar för mycket.
+- notes: en kort svensk mening om vad som påverkar priset mest för just den här varan.
+- confidence: low, medium eller high.`;
+  const r = await claude({ model: AI_MODEL, max_tokens: 8000, output_config: { effort: 'low', format: { type: 'json_schema', schema: ID_SCHEMA } },
+    messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl.split(',')[1] } }, { type: 'text', text: prompt }] }] });
+  const ai = aiJson(r); ai.model_used = r.model; ai.usage = aiCost(r); ai.source = 'app';
+  return ai;
+}
+
+// ---------- snabbsvar ur den stora databasen ----------
+// kombo/terms.json: alla varutyper med priser från Blocket och Tradera (byggs varje natt). Laddas en gång och sparas av webbläsaren.
+const KT = { map: null, p: null };
+function loadKTerms() {
+  if (KT.map) return Promise.resolve(KT.map);
+  return KT.p || (KT.p = readDbFile('kombo/terms.json').then(d => {
+    KT.map = new Map(d ? d.rows.map(r => { const o = rowObj(d.cols, r); return [o.k, o]; }) : []);
+    FS.terms = [...KT.map.values()]; render(); return KT.map;
+  }).catch(() => (KT.map = new Map())));
+}
+function wordKeys(text) {
+  const ws = ((text || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(x => x.length >= 3 && !/^\d+$/.test(x));
+  const o = new Set(ws); for (let i = 0; i + 1 < ws.length; i++) if (ws[i] !== ws[i + 1]) o.add(ws[i] + ' ' + ws[i + 1]);
+  return [...o];
+}
+// Bästa varutyperna för en text: pålitliga först, ordpar före enstaka ord, mycket data före lite.
+function lookupTerms(text, n = 5) {
+  if (!KT.map) { loadKTerms(); return null; }
+  const W = { 3: 30, 2: 22, 1: 8, 0: 0 };
+  const hits = wordKeys(text).map(k => KT.map.get(k)).filter(Boolean)
+    .map(t => ({ t, s: (W[t.conf] || 0) + (t.k.includes(' ') ? 6 : 0) + Math.log10(1 + t.bN + t.tN) * 3 + (t.fair > 0 ? 5 : 0) })).sort((a, b) => b.s - a.s);
+  const out = [];
+  for (const h of hits) { if (out.some(o => o.k.includes(' ') && o.k.split(' ').includes(h.t.k))) continue; out.push(h.t); if (out.length >= n) break; }
+  return out;
+}
+function dbHitHTML(t, buyPrice) {
+  const v = flipVal(t, buyPrice ?? null);
+  return `<button class="db-hit" data-dbhit="${esc(t.k)}">
+    <div class="db-hit-main"><b>${esc(t.k)}</b><div class="meta">${confPill(t.conf, t.src)}${t.tN ? `<span class="pill">${t.tN} sålda Tradera</span>` : ''}${t.gN ? `<span class="pill">${t.gN} sålda Blocket</span>` : ''}<span class="pill">${t.bN} ute</span>${t.ship ? `<span class="pill">frakt ~${kr(t.ship)}</span>` : ''}</div></div>
+    <div class="db-hit-p"><span class="muted small">Rättvist pris</span><b class="num">${t.fair ? kr(t.fair) : '–'}</b>
+      ${v ? (buyPrice != null && v.vd ? `<span class="small ${v.vd.cls === 'buy' ? 'pos' : v.vd.cls === 'skip' ? 'neg' : ''}">${v.vd.label} ${v.vd.profit >= 0 ? '+' : ''}${kr(v.vd.profit)}</span>` : `<span class="small">max i butik ${v.max > 0 ? kr(v.max) : 'lönar ej'}</span>`) : ''}</div></button>`;
+}
+function dbSearchHTML(q) {
+  const hits = lookupTerms(q, 6);
+  if (hits === null) return `<div class="panel"><h3>I stora databasen</h3><div class="muted small"><span class="spinner"></span>Laddar Blocket + Tradera…</div></div>`;
+  if (!hits.length) return '';
+  return `<div class="panel"><div class="spread"><h3>I stora databasen</h3><span class="muted small">Blocket + Tradera, sålda priser</span></div>
+    <div class="db-hits">${hits.map(t => dbHitHTML(t, S.price)).join('')}</div></div>`;
+}
+
+// ---------- direktsvar på foton ----------
+S.instant = store.get('tk-instant', []);
+const saveInstant = () => store.set('tk-instant', S.instant.slice(0, 20).map(x => ({ ...x, url: undefined })));
+function instantHTML() {
+  if (!S.instant.length) return '';
+  return `<div class="panel"><div class="spread"><h3>Direktsvar</h3><button class="btn small" data-instclear="1">Rensa</button></div>
+    ${S.instant.map(x => {
+      const ai = x.ai || {}, hits = x.ai ? lookupTerms([ai.specificQuery, ai.genericQuery, ai.name].join(' '), 3) : [];
+      const price = S.fyndPrice[x.id] ?? S.price;
+      return `<div class="instant"><img class="photo" src="${x.thumb}" alt="">
+        <div class="fynd">
+          ${x.status === 'working' ? `<div class="row"><span class="spinner"></span><b>${esc(x.text || 'Känner igen…')}</b></div>` : x.status === 'error' ? `<div class="note bad small">${esc(x.err)}</div>` : `
+          <div><h3>${esc(ai.name)}</h3><div class="meta">${ai.brand ? `<span class="pill">${esc(ai.brand)}</span>` : ''}<span class="pill">AI: ${{ low: 'osäker', medium: 'ganska säker', high: 'säker' }[ai.confidence] || '?'}</span>${ai.usage ? `<span class="pill">${ai.usage.sek.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} kr</span>` : ''}</div></div>
+          ${ai.notes ? `<p class="muted small">${esc(ai.notes)}</p>` : ''}
+          ${hits === null ? '<div class="muted small"><span class="spinner"></span>Slår upp i databasen…</div>' : hits.length ? `<div class="db-hits">${hits.map(t => dbHitHTML(t, price)).join('')}</div>` : '<div class="muted small">Inget i databasen än. Den fulla scrapen på GitHub tar fram priser om en stund.</div>'}
+          <div class="row"><button class="btn small" data-ad="i:${esc(x.id)}">Skriv annons</button>${searchLinks(ai.specificQuery || x.text || '')}</div>`}
+        </div></div>`;
+    }).join('')}</div>`;
+}
+async function runWithLimit(items, n, fn) { const q = [...items]; await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length) await fn(q.shift()); })); }
+
+// ---------- annonshjälp ----------
+// Skriver rubrik, beskrivning och pris för Blocket och Tradera, utifrån varan och databasens sålda priser.
+const AD = { open: null, busy: false, res: null, err: null };
+function adSource(key) {
+  const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+  if (kind === 'i') { const x = S.instant.find(y => y.id === id); return x && { name: x.ai ? x.ai.name : x.text, ai: x.ai, image: x.photo ? rawUrl(x.photo) : null, buy: S.fyndPrice[id] ?? S.price }; }
+  if (kind === 'f') { const f = S.fynd.find(y => y.id === id); return f && { name: (f.ai && f.ai.name) || f.text, ai: f.ai, image: f.photo ? rawUrl(f.photo) : null, buy: S.fyndPrice[id] ?? S.price, t: f.specific || f.generic }; }
+  if (kind === 'inv') { const i = S.inv.find(y => y.id === id); return i && { name: i.name, ai: null, image: null, buy: i.buy, t: S.terms.get(i.termId) }; }
+  return null;
+}
+function adPrices(src) {
+  const hits = lookupTerms([src.ai ? src.ai.specificQuery : '', src.ai ? src.ai.genericQuery : '', src.name].join(' '), 2) || [];
+  const t = hits[0], v = src.t ? valuation(src.t) : null;
+  const fair = t && t.fair ? t.fair : v ? v.resale : null;
+  return { t, fair, ask: t && t.b50 ? t.b50 : v && v.bv ? v.bv : null, sold: t && t.t50 ? t.t50 : v && v.tv ? v.tv : null, ship: t && t.ship ? t.ship : null };
+}
+async function writeAd(key) {
+  const src = adSource(key); if (!src) return;
+  AD.open = key; AD.busy = true; AD.res = null; AD.err = null; renderAd();
+  await loadKTerms();
+  const pr = adPrices(src);
+  // Utan Claude-nyckel: enkel mall med priser ur databasen.
+  const fallback = () => ({ title: src.name, description: `${src.name}.\n\nSkick: \nMått: \nHämtas i Spånga eller skickas mot frakt.`,
+    blocketPrice: pr.fair ? Math.round(Math.max(pr.fair, pr.ask || 0) / 10) * 10 : null, traderaStart: pr.fair ? Math.max(1, Math.round(pr.fair * 0.5 / 10) * 10) : null,
+    traderaBuyNow: pr.fair ? Math.round(pr.fair * 1.2 / 10) * 10 : null, tips: 'Lägg in Claude-nyckeln på kontot för en riktig annonstext.' });
+  try {
+    if (!vault.c) { AD.res = fallback(); return; }
+    const facts = [`Vara: ${src.name}`, src.ai && src.ai.brand ? `Märke: ${src.ai.brand} ${src.ai.model || ''}` : '', src.ai && src.ai.notes ? `Prispåverkan: ${src.ai.notes}` : '',
+      pr.fair ? `Rättvist pris (sålda, försiktigt): ${pr.fair} kr` : '', pr.sold ? `Median slutpris Tradera: ${pr.sold} kr` : '', pr.ask ? `Median utropspris Blocket (privat): ${pr.ask} kr` : '',
+      pr.ship ? `Vanlig frakt på Tradera: ${pr.ship} kr` : '', src.buy != null ? `Inköpspris: ${src.buy} kr` : ''].filter(Boolean).join('\n');
+    const content = [];
+    if (src.image) content.push({ type: 'image', source: { type: 'url', url: src.image } });
+    content.push({ type: 'text', text: `Skriv en säljannons på svenska för Blocket och Tradera. Säljaren bor i Spånga, Stockholm.
+${facts}
+
+Regler: ärlig och konkret, inga överdrifter, inga emojis. Beskriv det som syns på bilden (skick, färg, detaljer). Skriv [fyll i] där säljaren måste komplettera (t.ex. mått eller fel som inte syns).
+Rubriken: max 60 tecken, märke och modell först, som svenska säljare skriver.
+Priser: blocketPrice är utropspris (lite över rättvist pris, folk prutar). traderaStart är utropspris på auktion (lågt nog för att locka bud). traderaBuyNow är köp nu-pris. Använd siffrorna ovan.
+tips: en mening om vad som får just den här varan att sälja snabbare.` });
+    const r = await claude({ model: AI_MODEL, max_tokens: 4000, output_config: { effort: 'low', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false,
+      required: ['title', 'description', 'blocketPrice', 'traderaStart', 'traderaBuyNow', 'tips'],
+      properties: { title: { type: 'string' }, description: { type: 'string' }, blocketPrice: { type: 'integer' }, traderaStart: { type: 'integer' }, traderaBuyNow: { type: 'integer' }, tips: { type: 'string' } } } } },
+      messages: [{ role: 'user', content }] });
+    AD.res = aiJson(r); AD.res.cost = aiCost(r).sek;
+  } catch (e) { AD.err = e.message; AD.res = fallback(); }
+  finally { AD.busy = false; AD.pr = pr; renderAd(); }
+}
+function renderAd() {
+  let host = $('#adSheet'); if (!host) { host = document.createElement('div'); host.id = 'adSheet'; document.body.appendChild(host); }
+  if (!AD.open) { host.innerHTML = ''; if (!S.open) document.body.style.overflow = ''; return; }
+  document.body.style.overflow = 'hidden';
+  const a = AD.res, pr = AD.pr || {};
+  const field = (id, label, val, rows) => `<div class="field"><div class="spread"><label for="${id}">${label}</label><button class="btn small" type="button" data-copy="${id}">Kopiera</button></div>
+    ${rows ? `<textarea id="${id}" rows="${rows}">${esc(val)}</textarea>` : `<input id="${id}" type="text" value="${esc(val)}">`}</div>`;
+  host.innerHTML = `<div class="sheet-bg" data-adclose="1"><div class="sheet" role="dialog" aria-modal="true" aria-label="Annons">
+    <div class="sheet-head"><div><div class="lbl">Annonshjälp</div><h2 style="text-transform:none">${AD.busy ? 'Skriver annonsen…' : 'Din annons'}</h2></div><button class="btn small" data-adclose="1">Stäng ✕</button></div>
+    ${AD.busy ? '<div class="empty muted"><span class="spinner"></span>Claude tittar på varan och priserna…</div>' : `
+      ${AD.err ? `<div class="note warn small">Claude svarade inte (${esc(AD.err)}), så det här är en enkel mall.</div>` : ''}
+      ${field('adTitle', 'Rubrik', a.title)}
+      ${field('adDesc', 'Beskrivning', a.description, 9)}
+      <div class="kv">
+        <div><span>Blocket, utropspris</span><b>${kr(a.blocketPrice)}</b><span>folk prutar oftast</span></div>
+        <div><span>Tradera, utrop</span><b>${kr(a.traderaStart)}</b><span>auktion</span></div>
+        <div><span>Tradera, köp nu</span><b>${kr(a.traderaBuyNow)}</b><span>${pr.ship ? 'frakt brukar vara ~' + kr(pr.ship) : ''}</span></div>
+        <div><span>Rättvist pris</span><b>${kr(pr.fair)}</b><span>${pr.t ? esc(pr.t.k) + ' i databasen' : 'ur katalogen'}</span></div>
+      </div>
+      ${a.tips ? `<p class="muted small">Tips: ${esc(a.tips)}</p>` : ''}
+      ${a.cost ? `<p class="muted small">Kostade ${a.cost.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} kr.</p>` : ''}
+      <div class="row"><a class="btn" href="https://www.blocket.se/annonser/ny" target="_blank" rel="noopener">Ny annons på Blocket ↗</a><a class="btn" href="https://www.tradera.com/selling/new" target="_blank" rel="noopener">Sälj på Tradera ↗</a></div>`}
+  </div></div>`;
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-ad],[data-adclose],[data-copy],[data-dbhit],[data-instclear]'); if (!t) return;
+  if (t.dataset.ad) { writeAd(t.dataset.ad); return; }
+  if (t.dataset.adclose && (e.target === t || t.tagName === 'BUTTON')) { AD.open = null; renderAd(); return; }
+  if (t.dataset.copy) { const el = document.getElementById(t.dataset.copy); try { await navigator.clipboard.writeText(el.value); toast('Kopierat'); } catch { el.select(); toast('Markerat, kopiera själv'); } return; }
+  if (t.dataset.dbhit) { FS.mode = 'sok'; FS.q = t.dataset.dbhit; FS.open = t.dataset.dbhit; FS.limit = 40; setMenu(false); location.hash = 'flippa'; return; }
+  if (t.dataset.instclear) { S.instant = []; saveInstant(); render(); }
+});
+
+// ---------- lagret på kontot ----------
+// Lagret sparas krypterat i data/lager.json på grenen data (nyckeln d i valvet), så att det syns på alla dina enheter.
+// Varje sak har updatedAt; borttagna sparas som gravstenar. Vid sammanslagning vinner den senast ändrade.
+const LAGER_PATH = 'data/lager.json';
+const LS = { status: '', at: store.get('tk-lagersync', null), timer: null, snap: null, busy: false };
+const invKey = i => JSON.stringify({ ...i, updatedAt: undefined });
+function stampInv() {
+  const now = new Date().toISOString(), tomb = store.get('tk-inv-deleted', {});
+  if (!LS.snap) LS.snap = new Map(store.get('tk-inv-snap', []));
+  const ids = new Set();
+  for (const i of S.inv) { ids.add(i.id); const k = invKey(i); if (LS.snap.get(i.id) !== k) { i.updatedAt = now; LS.snap.set(i.id, k); } }
+  for (const id of [...LS.snap.keys()]) if (!ids.has(id)) { tomb[id] = now; LS.snap.delete(id); }
+  store.set('tk-inv-snap', [...LS.snap]); store.set('tk-inv-deleted', tomb);
+}
+async function dataKey() { return crypto.subtle.importKey('raw', b64ToBytes(vault.d), 'AES-GCM', false, ['encrypt', 'decrypt']); }
+async function syncLager() {
+  if (!gh.token || !vault.d || LS.busy) return;
+  LS.busy = true; LS.status = 'Synkar…';
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let remote = { items: [], deleted: {} }, sha;
+      try {
+        const cur = await api(repoPath(`/contents/${LAGER_PATH}?ref=${DATA_BRANCH}`)); sha = cur.sha;
+        const blob = JSON.parse(fromB64(cur.content));
+        const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(blob.iv) }, await dataKey(), b64ToBytes(blob.ct));
+        remote = JSON.parse(new TextDecoder().decode(pt));
+      } catch (e) { if (e.status !== 404 && !(e instanceof SyntaxError)) throw e; }
+      // Slå ihop: senast ändrade vinner, gravstenar tar bort saker som inte ändrats efter borttagningen.
+      const tomb = { ...(remote.deleted || {}), ...store.get('tk-inv-deleted', {}) };
+      const by = new Map();
+      for (const i of [...(remote.items || []), ...S.inv]) { const o = by.get(i.id); if (!o || (i.updatedAt || '') > (o.updatedAt || '')) by.set(i.id, i); }
+      const merged = [...by.values()].filter(i => !(tomb[i.id] && tomb[i.id] >= (i.updatedAt || '')));
+      const changedLocal = JSON.stringify(merged.map(invKey).sort()) !== JSON.stringify(S.inv.map(invKey).sort());
+      S.inv = merged; store.set('tk-inventory', S.inv);
+      LS.snap = new Map(S.inv.map(i => [i.id, invKey(i)])); store.set('tk-inv-snap', [...LS.snap]);
+      const doc = { v: 1, updatedAt: new Date().toISOString(), items: merged, deleted: tomb };
+      const same = JSON.stringify(merged.map(invKey).sort()) === JSON.stringify((remote.items || []).map(invKey).sort());
+      if (same && sha) { store.set('tk-inv-deleted', {}); if (changedLocal) render(); break; }
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await dataKey(), new TextEncoder().encode(JSON.stringify(doc))));
+      try { await putFile(LAGER_PATH, b64(JSON.stringify({ v: 1, cipher: 'AES-GCM-256', iv: bytesToB64(iv), ct: bytesToB64(ct) })), 'Lager', sha); store.set('tk-inv-deleted', {}); if (changedLocal) render(); break; }
+      catch (e) { if (e.status !== 409 && e.status !== 422) throw e; }
+    }
+    LS.at = new Date().toISOString(); store.set('tk-lagersync', LS.at); LS.status = '';
+  } catch (e) { LS.status = 'Kunde inte synka: ' + e.message; }
+  LS.busy = false; if (S.tab === 'lager') render();
+}
+function queueSync() { clearTimeout(LS.timer); LS.timer = setTimeout(syncLager, 2500); }
+
+// ---------- egen statistik ----------
+function ownStatsHTML(inv) {
+  const sold = inv.filter(i => i.status === 'sold' && i.soldPrice != null);
+  if (!sold.length) return '';
+  const profit = i => (+i.soldPrice || 0) - (+i.buy || 0);
+  const held = i => i.soldAt && i.boughtAt ? Math.max(0, (new Date(i.soldAt) - new Date(i.boughtAt)) / 864e5) : null;
+  const group = (keyFn) => { const m = new Map(); for (const i of sold) { const k = keyFn(i) || 'Okänt'; if (!m.has(k)) m.set(k, []); m.get(k).push(i); }
+    return [...m.entries()].map(([k, l]) => ({ k, n: l.length, p: l.reduce((s, i) => s + profit(i), 0), rev: l.reduce((s, i) => s + (+i.soldPrice || 0), 0), cost: l.reduce((s, i) => s + (+i.buy || 0), 0),
+      d: (() => { const d = l.map(held).filter(x => x != null); return d.length ? d.reduce((a, b) => a + b, 0) / d.length : null; })() })); };
+  const months = group(i => (i.soldAt || '').slice(0, 7)).sort((a, b) => a.k.localeCompare(b.k)).slice(-12);
+  const mMax = Math.max(1, ...months.map(m => Math.abs(m.p)));
+  const table = (title, rows) => `<div><div class="lbl" style="margin-bottom:6px">${title}</div><div class="scroll-x"><table class="table small"><thead><tr><th></th><th class="r">Sålda</th><th class="r">Vinst</th><th class="r">x</th><th class="r">Dagar</th></tr></thead><tbody>
+    ${rows.sort((a, b) => b.p - a.p).map(r => `<tr><td>${esc(r.k)}</td><td class="r">${r.n}</td><td class="r ${r.p >= 0 ? 'pos' : 'neg'}">${kr(r.p)}</td><td class="r">${r.cost ? (r.rev / r.cost).toFixed(1) : '–'}</td><td class="r">${r.d != null ? Math.round(r.d) : '–'}</td></tr>`).join('')}</tbody></table></div></div>`;
+  const best = [...sold].sort((a, b) => profit(b) - profit(a));
+  const est = sold.filter(i => i.estAtBuy > 0), hit = est.length ? est.reduce((s, i) => s + (+i.soldPrice || 0) / i.estAtBuy, 0) / est.length : null;
+  const perDay = sold.map(i => { const d = held(i); return d != null ? profit(i) / Math.max(1, d) : null; }).filter(x => x != null);
+  const old = inv.filter(i => i.status !== 'sold' && i.boughtAt && (Date.now() - new Date(i.boughtAt)) / 864e5 > 45);
+  return `<div class="panel"><h3>Din statistik</h3>
+    <div class="kv">
+      <div><span>Snittvinst per sak</span><b>${kr(sold.reduce((s, i) => s + profit(i), 0) / sold.length)}</b><span>${sold.length} sålda</span></div>
+      <div><span>Vinst per dag i lager</span><b>${perDay.length ? kr(perDay.reduce((a, b) => a + b, 0) / perDay.length) : '–'}</b><span>snitt per sak</span></div>
+      <div><span>Träffsäkerhet</span><b>${hit != null ? Math.round(hit * 100) + ' %' : '–'}</b><span>${hit != null ? 'sålt pris mot appens uppskattning' : 'räknas för saker köpta från och med nu'}</span></div>
+      <div><span>Ligger länge</span><b>${old.length} st</b><span>osålda över 45 dagar${old.length ? ': sänk priset?' : ''}</span></div>
+    </div>
+    ${months.length > 1 ? `<div><div class="lbl" style="margin-bottom:6px">Vinst per månad</div>${months.map(m => `<div class="barrow"><span class="lab">${esc(m.k)}</span><div class="bar" style="width:${Math.max(2, Math.abs(m.p) / mMax * 100)}%;${m.p < 0 ? 'background:var(--bad)' : ''}"></div><span class="num" style="text-align:right">${kr(m.p)}</span></div>`).join('')}</div>` : ''}
+    <div class="own-grid">${table('Per plattform', group(i => i.platform))}${table('Per kategori', group(i => (S.terms.get(i.termId) || {}).cat || i.cat))}</div>
+    <div class="own-grid"><div><div class="lbl" style="margin-bottom:6px">Bästa flippar</div>${best.filter(i => profit(i) > 0).slice(0, 3).map(i => `<div class="spread small"><span>${esc(i.name)}</span><b class="pos num">+${kr(profit(i))}</b></div>`).join('') || '<span class="muted small">Inga med vinst än.</span>'}</div>
+      <div><div class="lbl" style="margin-bottom:6px">Sämsta</div>${best.slice(Math.max(3, best.length - 3)).reverse().map(i => `<div class="spread small"><span>${esc(i.name)}</span><b class="num ${profit(i) >= 0 ? '' : 'neg'}">${kr(profit(i))}</b></div>`).join('')}</div></div>
+  </div>`;
+}
+
+// ---------- vakt: startar nattens körningar om GitHub har tappat dem ----------
+async function watchdog() {
+  if (!gh.token || !gh.owner) return;
+  const last = store.get('tk-watchdog', 0); if (Date.now() - last < 3 * 3600e3) return;
+  try {
+    const running = async wf => { const r = await api(repoPath(`/actions/workflows/${wf}/runs?per_page=5`)); return (r.workflow_runs || []).some(x => x.status !== 'completed'); };
+    const idx = await readDbFile('index.json');
+    const age = idx && idx.updatedAt ? (Date.now() - new Date(idx.updatedAt)) / 36e5 : 999;
+    if (age > 26 && !(await running('databas.yml'))) { await dispatchDb('alla'); store.set('tk-watchdog', Date.now()); toast('Nattens databaskörning hade inte gått. Den är startad nu.'); }
+    const cat = S.meta && S.meta.generatedAt ? (Date.now() - new Date(S.meta.generatedAt)) / 864e5 : 0;
+    if (cat > 5 && !(await running('scrape.yml'))) { await dispatchScrape(true); store.set('tk-watchdog', Date.now()); }
+  } catch {}
+}
+
 // ---------- vy: Lager ----------
-function saveInv() { store.set('tk-inventory', S.inv); }
+function saveInv() { store.set('tk-inventory', S.inv); stampInv(); queueSync(); }
 function renderLager() {
   const el = $('#v-lager');
   const inv = [...S.inv].sort((a, b) => (b.boughtAt || '').localeCompare(a.boughtAt || ''));
@@ -734,6 +1081,7 @@ function renderLager() {
       <div class="tile"><span>I källaren nu</span><b class="num">${unsold.length} st</b><span>uppskattat värde ${kr(stockValue)}</span></div>
       <div class="tile"><span>Snitt tid till såld</span><b class="num">${days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) + ' d' : '–'}</b><span>från köp till såld</span></div>
     </div>
+    ${ownStatsHTML(inv)}
     <form class="panel" id="invForm"><h3>Lägg till köp</h3>
       <div class="form-grid">
         <div class="field"><label for="invName">Vara</label><input id="invName" type="text" list="termList" required placeholder="t.ex. rörstrand mon amie fat"><datalist id="termList">${opts}</datalist></div>
@@ -741,7 +1089,7 @@ function renderLager() {
         <div class="field"><label for="invDate">Köpt</label><input id="invDate" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
         <button class="btn primary" type="submit">Lägg i lager</button>
       </div>
-      <p class="muted small">Lagret sparas bara på den här enheten. Ta en säkerhetskopia under Inställningar ibland.</p>
+      <p class="muted small">${vault.d && gh.token ? (LS.status ? esc(LS.status) : `Lagret synkas krypterat till ditt konto${LS.at ? ' (senast ' + when(LS.at) + ')' : ''}. Det syns på alla enheter där du är inloggad.`) : 'Lagret sparas bara på den här enheten. Spara lösenordet en gång till under Inställningar → Konto, så synkas det till alla dina enheter.'}</p>
     </form>
     ${inv.length ? `<div class="inv">${inv.map(invItemHTML).join('')}</div>` : `<div class="panel empty"><h3>Inget i lagret än</h3><p class="muted">Tryck ”Köpt! Lägg i lager” på en vara eller fyll i formuläret ovan.</p></div>`}`;
 }
@@ -757,6 +1105,7 @@ function invItemHTML(i) {
       <div class="field"><label for="pf-${id}">Plattform</label><select id="pf-${id}" data-f="platform">${['', 'Tradera', 'Blocket', 'FB Marketplace', 'Annat'].map(p => `<option value="${p}" ${i.platform === p ? 'selected' : ''}>${p || '–'}</option>`).join('')}</select></div>
       ${i.status === 'sold' ? `<div class="field"><label for="sp-${id}">Fick betalt (kr)</label><input id="sp-${id}" data-f="soldPrice" type="number" inputmode="numeric" min="0" value="${i.soldPrice ?? ''}"></div>
       <div class="field"><label for="sd-${id}">Såld</label><input id="sd-${id}" data-f="soldAt" type="date" value="${esc(i.soldAt || '')}"></div>` : ''}
+      <div class="field" style="align-self:end"><button class="btn small" data-ad="inv:${id}">Skriv annons</button></div>
       <div class="field" style="align-self:end"><button class="btn small danger" data-delinv="${id}">${S.confirm === 'inv:' + i.id ? 'Säker? Ta bort' : 'Ta bort'}</button></div>
     </div></div>`;
 }
@@ -820,9 +1169,7 @@ async function loadFlip(force) {
 }
 async function loadAllTerms() {
   if (FS.terms || FS.termsLoading) return;
-  FS.termsLoading = true;
-  try { const d = await readDbFile('kombo/terms.json'); FS.terms = d ? d.rows.map(r => rowObj(d.cols, r)) : []; } catch { FS.terms = []; }
-  FS.termsLoading = false; render();
+  FS.termsLoading = true; await loadKTerms(); FS.terms = FS.terms || []; FS.termsLoading = false; render();
 }
 async function loadTrend(k) {
   const n = String(fnv(k) % 32).padStart(2, '0');
@@ -836,7 +1183,7 @@ async function loadTrend(k) {
 function flipVal(t, buyPrice) {
   if (!t || !t.fair) return null;
   const resale = t.fair, platform = (t.src & 1) ? S.cfg.platform : 'blocket';
-  const net = resale - fee(platform, resale);
+  const net = resale - fee(platform, resale) - extraCost(t.ship);
   const fb = FS.fb && FS.fb.terms[t.k];
   let buy = buyPrice, buyAt = '';
   if (buy == null) {
@@ -875,7 +1222,7 @@ function flipDetail(t, v) {
   const row = (lab, n, a, b, c, d) => `<tr><td>${lab}</td><td class="r">${n}</td><td class="r">${a}</td><td class="r">${b}</td><td class="r">${c}</td><td class="r">${d}</td></tr>`;
   return `<div class="flip-body">
     <div class="spread"><div>${tagHTML({ max: v.max }, false)}</div><div class="muted small">Säljs på ${v.platform === 'tradera' ? 'Tradera' : 'Blocket'} · regel: ${ruleText()}</div></div>
-    <div class="note small">${fairText(t)}</div>
+    <div class="note small">${fairText(t)}${t.ship ? ` Frakten brukar kosta ~${kr(t.ship)} på Tradera${S.cfg.payShip ? ", den är avdragen eftersom du bjuder på frakten" : ", köparen betalar"}.` : ""}</div>
     <div class="scroll-x"><table class="table small"><thead><tr><th></th><th class="r">Antal</th><th class="r">Låg</th><th class="r">Median</th><th class="r">Hög</th><th class="r">Fart</th></tr></thead><tbody>
       ${row('<span class="src b">Blocket</span><br>ute nu', t.bN, kr(t.b25), kr(t.b50), kr(t.b75), '')}
       ${t.gN ? row('<span class="src b">Blocket</span><br>sålda 30 d', t.gN, '', kr(t.g50), '', fdays(t.s50)) : ''}
@@ -978,9 +1325,11 @@ const HOME = { lat: 59.39, lon: 17.905 };   // Spånga
 const COND_NAMES = ['', 'Nytt', 'Som nytt', 'Bra skick', 'Okej skick', 'Trasigt'];
 const WEEKDAYS = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'];
 const STOP = new Set('och med for för till som det den att barn bra nytt ny nya sälj säljes stol stolar från utan med på i av en ett is the and'.split(' '));
+// Databasen läses från raw.githubusercontent (CDN, snabbt, och sparas av appen för dålig täckning). GitHub API bara som reserv.
 async function readDbFile(path) {
-  if (gh.token && gh.owner) {
-    try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=db`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; }
+  if (gh.owner) {
+    try { const r = await fetch(`https://raw.githubusercontent.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/db/${path}`); if (r.ok) return r.json(); if (r.status === 404) return null; } catch {}
+    if (gh.token) { try { return JSON.parse(await api(repoPath(`/contents/${path}?ref=db`), { accept: 'application/vnd.github.raw+json' })); } catch (e) { if (e.status === 404) return null; } }
   }
   if (!gh.owner) { const l = await fetch(`./dbdata/${path}`, { cache: 'no-store' }).catch(() => null); return l && l.ok ? l.json() : null; }   // lokal förhandsvisning
   const r = await fetch(`https://raw.githubusercontent.com/${encodeURIComponent(gh.owner)}/${encodeURIComponent(gh.repo)}/db/${path}`, { cache: 'no-store' });
@@ -1022,7 +1371,8 @@ function dbRows() {
     const lat = r[ix.lat], lon = r[ix.lon];
     const km = lat != null && lon != null ? Math.hypot((lat - HOME.lat) * 111, (lon - HOME.lon) * 111 * Math.cos(HOME.lat * Math.PI / 180)) : null;
     const pub = new Date(r[ix.pub] * 1000);
-    return { id: r[ix.id], t: r[ix.t] || '', p: r[ix.p], p0: r[ix.p0], img: r[ix.img] ? d.imgBase + r[ix.img] : '', n: r[ix.n], loc: r[ix.loc] || '', reg: r[ix.reg] || '',
+    const im = r[ix.img];   // kompakt format: bara uuid, sökvägen är item/<id>/<uuid>
+    return { id: r[ix.id], t: r[ix.t] || '', p: r[ix.p], p0: r[ix.p0], img: im ? d.imgBase + (im.includes('/') ? im : `item/${r[ix.id]}/${im}`) : '', n: r[ix.n], loc: r[ix.loc] || '', reg: r[ix.reg] || (d.watch && d.watch.locationName) || '',
       brand: r[ix.brand] || '', cond: r[ix.cond] || 0, fl: r[ix.fl] || 0, pubDay, first: r[ix.first], last: r[ix.last], gone, ph, km,
       days: gone ? gone - pubDay : null, age: (d.today || 0) - pubDay, drop: r[ix.p] < r[ix.p0] ? (r[ix.p0] - r[ix.p]) / r[ix.p0] : 0,
       wd: pub.getDay(), hr: pub.getHours(), u: d.urlBase + r[ix.id] };
@@ -1223,11 +1573,15 @@ function accountHTML() {
     <p>Inloggad på den här enheten${gh.owner ? ` som <b>${esc(gh.owner)}</b>` : ''}${tokenStore.remembered() ? '' : ', tills fliken stängs'}.</p>
     ${has ? `<p class="muted small">Nyckeln är sparad på kontot (${when(S.auth.savedAt)}). På en annan mobil eller dator öppnar du appen och loggar in med ditt lösenord.</p>`
       : `<div class="note warn small">Nyckeln finns bara på den här enheten. Spara den på kontot med ett lösenord, så kan du logga in var som helst.</div>`}
+    <div class="meta"><span class="pill ${vault.c ? 'fast' : ''}">Claude i mobilen: ${vault.c ? 'på' : 'av'}</span><span class="pill ${vault.d ? 'fast' : ''}">Lagret synkas: ${vault.d ? 'ja' : 'nej'}</span></div>
+    ${has && !vault.d ? `<div class="note small">Spara med ditt lösenord en gång till nedan, så slås lagersynk på. Lägg samtidigt in en Claude-nyckel för direktsvar på foton.</div>` : ''}
     <form id="sealForm" class="form-grid">
-      <div class="field"><label for="pw1">${has ? 'Nytt lösenord' : 'Välj lösenord'}</label><input id="pw1" type="password" autocomplete="new-password" minlength="10" required></div>
+      <div class="field" style="grid-column:1/-1"><label for="ck">Claude-nyckel (valfritt)</label><input id="ck" type="password" autocomplete="off" placeholder="${vault.c ? 'Sparad. Lämna tomt för att behålla.' : 'sk-ant-…'}"></div>
+      <div class="field"><label for="pw1">${has ? 'Lösenord (nytt eller samma)' : 'Välj lösenord'}</label><input id="pw1" type="password" autocomplete="new-password" minlength="10" required></div>
       <div class="field"><label for="pw2">Upprepa lösenordet</label><input id="pw2" type="password" autocomplete="new-password" minlength="10" required></div>
-      <button class="btn ${has ? '' : 'primary'}" type="submit">${has ? 'Byt lösenord' : 'Spara nyckeln på kontot'}</button>
+      <button class="btn ${has && vault.d ? '' : 'primary'}" type="submit">Spara på kontot</button>
     </form>
+    <p class="muted small">Claude-nyckeln skapar du på <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com ↗</a>. Gör en egen nyckel för appen och sätt en månadsgräns där, eftersom den används direkt från mobilen.</p>
     <p class="muted small">Minst 10 tecken, gärna en hel mening. Repot är publikt, så det är lösenordet som skyddar nyckeln. Nyckeln når bara det här repot och kan stängas av på GitHub när som helst.</p>
     <div class="row"><button class="btn danger" type="button" id="logout">Logga ut från den här enheten</button></div>
   </div>`;
@@ -1275,7 +1629,11 @@ function renderSettings() {
         <div class="field"><label for="c-traderaPct">Tradera-provision (%)</label><input id="c-traderaPct" type="number" min="0" step="0.5" value="${c.traderaPct}"></div>
         <div class="field"><label for="c-traderaCap">Tradera-tak (kr)</label><input id="c-traderaCap" type="number" min="0" value="${c.traderaCap}"></div>
         <div class="field"><label for="c-blocketFee">Blocket-avgift (kr)</label><input id="c-blocketFee" type="number" min="0" value="${c.blocketFee}"></div>
+        <div class="field"><label for="c-packCost">Förpackning per sak (kr)</label><input id="c-packCost" type="number" min="0" value="${c.packCost}"></div>
+        <div class="field"><label for="c-payShip">Frakten</label><select id="c-payShip"><option value="0" ${c.payShip ? '' : 'selected'}>Köparen betalar</option><option value="1" ${c.payShip ? 'selected' : ''}>Jag bjuder på frakten</option></select></div>
+        <div class="field"><label for="c-shipCost">Frakt om okänd (kr)</label><input id="c-shipCost" type="number" min="0" value="${c.shipCost}"></div>
       </div>
+      <p class="muted small">Frakt: i Flippa används vad frakten brukar kosta på Tradera för just den varutypen. Förpackning dras alltid av.</p>
       <p class="muted small">Maxpriset: uppskattat säljpris minus avgift ger det du får ut. Sedan tas det högsta (med ”båda kraven”: lägsta) inköpspris som ger ${kr(c.minProfit)} vinst eller x${c.minMult}. Blocket-priser är utropspriser, så prutmånen dras av först. Tradera visar även osålda auktioner, vilket gör Tradera-siffran något försiktig.</p>
       <div class="row"><button class="btn primary" type="submit">Spara regler</button><button class="btn" type="button" id="cfgReset">Återställ standard</button></div>
     </form>
@@ -1341,6 +1699,7 @@ document.addEventListener('click', async e => {
     const job = { id: f.id, createdAt: new Date().toISOString(), text: f.text || '', cat: '', image: f.photo };
     try {
       await putFile(`queue/${f.id}-r${Date.now().toString(36)}.json`, b64(JSON.stringify(job)), `Kör om foto ${f.id}`);
+      await dispatchScrape(false).catch(() => {});
       S.pending.unshift({ id: f.id, createdAt: job.createdAt, text: f.text || (f.ai && f.ai.name) || 'Foto', thumb: rawUrl(f.photo) });
       store.set('tk-pending', S.pending); render(); schedulePoll(); toast('Körs om på GitHub.');
     } catch (err) { toast('Kunde inte köra om: ' + err.message); }
@@ -1365,7 +1724,7 @@ document.addEventListener('click', async e => {
     catch (err) { toast('Kunde inte ta bort: ' + err.message); }
     return;
   }
-  if (t.id === 'logout') { tokenStore.set('', false); gh.token = ''; S.run = null; render(); toast('Utloggad från den här enheten.'); return; }
+  if (t.id === 'logout') { tokenStore.set('', false); gh.token = ''; vault = {}; vaultStore.set(null); S.run = null; render(); toast('Utloggad från den här enheten.'); return; }
   if (t.dataset.buy != null) {
     const name = t.dataset.buy, price = t.dataset.buyprice ? S.fyndPrice[t.dataset.buyprice] : S.price;
     S.open = null; location.hash = 'lager'; S.tab = 'lager'; render();
@@ -1433,13 +1792,15 @@ document.addEventListener('submit', async e => {
     const name = $('#invName').value.trim(), buy = +$('#invBuy').value;
     if (!name || !isFinite(buy)) return;
     const term = [...S.terms.values()].find(t => norm(t.q) === norm(name)) || [...S.terms.values()].map(t => [t, matches(t, name)]).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).map(([t]) => t)[0];
-    S.inv.push({ id: Date.now().toString(36), name, buy, boughtAt: $('#invDate').value || new Date().toISOString().slice(0, 10), status: 'stock', platform: '', termId: term ? term.id : null, soldPrice: null, soldAt: null });
+    const est = term ? valuation(term) : null;   // uppskattningen när du köpte, för träffsäkerheten i Din statistik
+    S.inv.push({ id: Date.now().toString(36), name, buy, boughtAt: $('#invDate').value || new Date().toISOString().slice(0, 10), status: 'stock', platform: '', termId: term ? term.id : null, soldPrice: null, soldAt: null, estAtBuy: est ? Math.round(est.resale) : null, cat: term ? term.cat : '' });
     saveInv(); render(); toast('Lagt i lagret'); return;
   }
   if (f.id === 'cfgForm') {
     const num = (id, d) => { const v = +$('#c-' + id).value; return isFinite(v) ? v : d; };
     S.cfg = { ...S.cfg, minProfit: num('minProfit', 100), minMult: Math.max(1, num('minMult', 2)), mode: $('#c-mode').value, valuation: $('#c-valuation').value, platform: $('#c-platform').value,
-      haggle: num('haggle', 20), traderaPct: num('traderaPct', 10), traderaCap: num('traderaCap', 200), blocketFee: num('blocketFee', 0) };
+      haggle: num('haggle', 20), traderaPct: num('traderaPct', 10), traderaCap: num('traderaCap', 200), blocketFee: num('blocketFee', 0),
+      packCost: num('packCost', 0), payShip: $('#c-payShip').value === '1', shipCost: num('shipCost', 59) };
     store.set('tk-settings', S.cfg); render(); toast('Reglerna är sparade'); return;
   }
   if (f.id === 'ghForm') {
@@ -1460,21 +1821,28 @@ document.addEventListener('submit', async e => {
     if (!S.auth) { st.textContent = 'Ingen nyckel är sparad på kontot.'; return; }
     st.textContent = 'Låser upp…';
     let token;
-    try { token = await openToken(S.auth, pw); } catch { st.textContent = 'Fel lösenord.'; $('#loginPw').select(); return; }
+    let v;
+    try { v = await openVault(S.auth, pw); token = v.t; } catch { st.textContent = 'Fel lösenord.'; $('#loginPw').select(); return; }
     gh.token = token; tokenStore.set(token, remember); S.borrowed = !remember;
+    vault = { c: v.c, d: v.d }; vaultStore.set(vault, remember);
     try { await api(repoPath('')); } catch (err) { st.textContent = err.status === 401 ? 'Lösenordet stämmer, men nyckeln har slutat gälla. Skapa en ny under Avancerat.' : 'Fel: ' + err.message; gh.token = ''; tokenStore.set('', false); return; }
-    render(); toast(remember ? 'Inloggad.' : 'Inloggad tills fliken stängs.'); loadData(true); return;
+    render(); toast(remember ? 'Inloggad.' : 'Inloggad tills fliken stängs.'); loadData(true); syncLager(); return;
   }
   if (f.id === 'sealForm') {
     const p1 = $('#pw1').value, p2 = $('#pw2').value;
     if (p1.length < 10) { toast('Lösenordet behöver minst 10 tecken.'); return; }
     if (p1 !== p2) { toast('Lösenorden är inte lika.'); return; }
     try {
-      const blob = await sealToken(gh.token, p1);
-      if (await openToken(blob, p1) !== gh.token) throw new Error('Kontrollen misslyckades.');
+      const ck = ($('#ck') && $('#ck').value.trim()) || vault.c || '';
+      if (ck && !/^sk-ant-/.test(ck)) { toast('Claude-nyckeln ska börja med sk-ant-.'); return; }
+      const dk = vault.d || bytesToB64(crypto.getRandomValues(new Uint8Array(32)));   // lagernyckel, skapas en gång
+      const blob = await sealToken(JSON.stringify({ t: gh.token, c: ck, d: dk }), p1);
+      const back = await openVault(blob, p1);
+      if (back.t !== gh.token || back.c !== ck || back.d !== dk) throw new Error('Kontrollen misslyckades.');
+      vault = { c: ck, d: dk }; vaultStore.set(vault, tokenStore.remembered());
       let sha; try { sha = (await api(repoPath('/contents/' + AUTH_PATH + '?ref=' + gh.branch))).sha; } catch {}
       await putFile(AUTH_PATH, b64(JSON.stringify(blob, null, 1)), 'Spara krypterad nyckel på kontot', sha);
-      S.auth = blob; render(); toast('Nyckeln är sparad på kontot. Logga in med lösenordet på andra enheter.');
+      S.auth = blob; render(); syncLager(); toast('Sparat på kontot. Logga in med lösenordet på andra enheter.');
     } catch (err) { toast('Kunde inte spara: ' + err.message); }
     return;
   }
@@ -1519,8 +1887,10 @@ $('#barInfo').addEventListener('click', () => setMenu(!S.menuOpen));
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.target.blur(); setMenu(false); } });
 setMenu(store.get('tk-menu', false));
 route();
-loadData(true).then(schedulePoll);
+loadData(true).then(() => { schedulePoll(); watchdog(); });
 loadAuth();
+if (vault.d && gh.token) syncLager();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
 </body>

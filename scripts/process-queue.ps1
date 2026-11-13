@@ -122,7 +122,9 @@ foreach ($f in $jobs) {
   try {
     $imgPath = if ($job.image) { Join-Path $RepoRoot $job.image } else { $null }
     $ai = $null
-    if ($imgPath -and (Test-Path $imgPath)) {
+    # Appen kan redan ha frågat Claude direkt från mobilen. Då återanvänds svaret (ingen dubbel kostnad).
+    if ($job.ai -and $job.ai.genericQuery) { $ai = $job.ai; Write-Host '   Bildigenkänning gjord i appen, återanvänder svaret.' }
+    elseif ($imgPath -and (Test-Path $imgPath)) {
       try { $ai = Invoke-Identify $imgPath $job.text $job.cat }
       catch { $item.message = "Bildigenkänningen misslyckades: $($_.Exception.Message)"; Write-Host $item.message -ForegroundColor Yellow }
     }

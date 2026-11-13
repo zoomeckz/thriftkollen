@@ -27,11 +27,11 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 public class KTerm {
-  public List<int> BAct = new List<int>(), BGone = new List<int>(), BSell = new List<int>(), TSold = new List<int>();
+  public List<int> BAct = new List<int>(), BGone = new List<int>(), BSell = new List<int>(), TSold = new List<int>(), TShip = new List<int>();
   public int TWeek;
   public int[] S;            // b10 b25 b50 b75 g50 s50 t25 t50 t75
   public int Conf, Cov;
-  public int TL, GL, Fair, Src;   // nedre gräns för medianen (Tradera, Blocket-sålda), rättvist pris, källa (1 Tradera, 2 Blocket-sålda, 4 uppskattat ur utropspris)
+  public int TL, GL, Fair, Src, Ship;   // Ship = median billigaste frakt på Tradera (köparen betalar oftast)   // nedre gräns för medianen (Tradera, Blocket-sålda), rättvist pris, källa (1 Tradera, 2 Blocket-sålda, 4 uppskattat ur utropspris)
 }
 public class KListing { public long Id; public string T, Img, Loc; public int P, PubDay, Km; public string[] Keys; }
 
@@ -80,7 +80,7 @@ public static class Kombo {
         if (cond != 5 && Today - pubDay <= 21 && !Bad.IsMatch(t.ToLowerInvariant())) {
           double lat = D(r[C["lat"]]), lon = D(r[C["lon"]]);
           int km = double.IsNaN(lat) || double.IsNaN(lon) ? -1 : (int)Math.Round(Math.Sqrt(Math.Pow((lat - HomeLat) * 111, 2) + Math.Pow((lon - HomeLon) * 111 * Math.Cos(HomeLat * Math.PI / 180), 2)));
-          string img = r[C["img"]] as string;
+          string img = r[C["img"]] as string; if (!string.IsNullOrEmpty(img) && img.IndexOf('/') < 0) img = "item/" + id + "/" + img;   // kompakt format: bara uuid
           Active.Add(new KListing { Id = id, T = t, P = p, PubDay = pubDay, Km = km, Img = string.IsNullOrEmpty(img) ? "" : imgBase + img, Loc = (r[C["loc"]] as string) ?? "", Keys = keys });
         }
       } else if (Today - gone <= 30) {
@@ -98,7 +98,8 @@ public static class Kombo {
       long id = L(r[C["id"]]); if (!seenT.Add(id)) continue;
       int p = (int)L(r[C["p"]]); if (p < 10) continue;
       int endDay = (int)Math.Floor(L(r[C["end"]]) / 86400.0); if (Today - endDay > 30) continue;
-      foreach (var k in Keys(r[C["t"]] as string)) { var x = Get(k); x.TSold.Add(p); if (Today - endDay < 7) x.TWeek++; }
+      int ship = C.ContainsKey("ship") ? (int)L(r[C["ship"]]) : 0;
+      foreach (var k in Keys(r[C["t"]] as string)) { var x = Get(k); x.TSold.Add(p); if (ship > 0) x.TShip.Add(ship); if (Today - endDay < 7) x.TWeek++; }
       n++;
     }
     return n;
@@ -128,7 +129,7 @@ public static class Kombo {
     foreach (var k in Terms.Keys.ToList()) {
       var t = Terms[k];
       if (t.BAct.Count + t.BGone.Count + t.TSold.Count < minN) { Terms.Remove(k); continue; }
-      t.BAct.Sort(); t.BGone.Sort(); t.BSell.Sort(); t.TSold.Sort();
+      t.BAct.Sort(); t.BGone.Sort(); t.BSell.Sort(); t.TSold.Sort(); t.TShip.Sort(); t.Ship = Q(t.TShip, .5);
       t.S = new int[] { Q(t.BAct, .1), Q(t.BAct, .25), Q(t.BAct, .5), Q(t.BAct, .75), Q(t.BGone, .5), Q(t.BSell, .5), Q(t.TSold, .25), Q(t.TSold, .5), Q(t.TSold, .75) };
       int b25 = t.S[1], b50 = t.S[2], b75 = t.S[3], g50 = t.S[4], t25 = t.S[6], t50 = t.S[7], t75 = t.S[8];
       bool bOk = t.BAct.Count >= 8 && b25 > 0 && b75 <= 3.5 * b25;
@@ -168,7 +169,7 @@ public static class Kombo {
   public static object[] TermRows() {
     return Terms.OrderByDescending(kv => kv.Value.BAct.Count + kv.Value.TSold.Count).Select(kv => {
       var t = kv.Value;
-      return (object)new object[] { kv.Key, t.BAct.Count, t.S[0], t.S[1], t.S[2], t.S[3], t.BGone.Count, t.S[4], t.S[5], t.TSold.Count, t.S[6], t.S[7], t.S[8], t.TWeek, t.Conf, t.Cov, t.TL, t.GL, t.Fair, t.Src };
+      return (object)new object[] { kv.Key, t.BAct.Count, t.S[0], t.S[1], t.S[2], t.S[3], t.BGone.Count, t.S[4], t.S[5], t.TSold.Count, t.S[6], t.S[7], t.S[8], t.TWeek, t.Conf, t.Cov, t.TL, t.GL, t.Fair, t.Src, t.Ship };
     }).ToArray();
   }
   // Konkreta annonser på Blocket som ligger långt under vad varan brukar gå för.
@@ -256,7 +257,7 @@ if ($nB + $nT -eq 0) { Write-Host 'Ingen data, hoppar över.'; return }
 $termRows = [Kombo]::TermRows()
 $deals = [Kombo]::Deals(500)
 $day = [Kombo]::Today
-$cols = @('k', 'bN', 'b10', 'b25', 'b50', 'b75', 'gN', 'g50', 's50', 'tN', 't25', 't50', 't75', 'tW', 'conf', 'cov', 'tL', 'gL', 'fair', 'src')
+$cols = @('k', 'bN', 'b10', 'b25', 'b50', 'b75', 'gN', 'g50', 's50', 'tN', 't25', 't50', 't75', 'tW', 'conf', 'cov', 'tL', 'gL', 'fair', 'src', 'ship')
 $out = Join-Path $DbDir 'kombo'
 $now = (Get-Date).ToUniversalTime().ToString('o')
 Write-Db (Join-Path $out 'terms.json') ([ordered]@{ v = 1; day = $day; updatedAt = $now; sources = @('blocket', 'tradera'); cols = $cols; rows = $termRows }) -Fast

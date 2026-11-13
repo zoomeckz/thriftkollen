@@ -62,6 +62,26 @@ scripts/kombo.ps1 körs sist i nattens databaskörning och slår ihop källorna 
   (inte automatiskt, Meta tillåter inte det). Visar var man kan köpa billigt och hur mycket som redan ligger ute.
 - Knappen **Flippa** bredvid Meny öppnar listan direkt.
 
+### Grenar
+
+- **main**: appen, skripten och inställningar (bevakningar, kategorier, kontot). GitHub Pages bygger härifrån.
+- **data**: det som ändras ofta: katalogen (`data/thriftdata.json`), fotade varor (`data/fynd.json`), sökord, kön av foton,
+  bilderna och ditt krypterade lager (`data/lager.json`). Ligger här så att varje foto inte bygger om hela sidan.
+- **db**: databasen (Blocket, Tradera, kombo). En enda commit utan historik som skrivs om varje natt.
+
+### I mobilen
+
+- **Installera appen:** öppna sidan i Safari/Chrome och välj "Lägg till på hemskärmen". Den startar snabbare och visar
+  senaste datan även med dålig täckning (sw.js sparar appen och databasfilerna).
+- **Direktsvar på foton:** lägg in en Claude-nyckel under Inställningar → Konto. Då känner mobilen igen varan direkt och
+  slår upp priset i den stora databasen på några sekunder. Den fulla scrapen körs fortfarande på GitHub, utan dubbel kostnad.
+- **Sök i allt:** sökrutan visar också träffar i den stora databasen (Blocket + Tradera, rättvist pris och max i butik).
+- **Annonshjälp:** "Skriv annons" på fotade varor och i lagret ger rubrik, beskrivning och priser för Blocket och Tradera.
+- **Lagret på kontot:** sparas krypterat (AES-GCM, nyckeln ligger i ditt lösenordsskyddade konto) och synkas mellan enheter.
+- **Din statistik** i lagret: vinst per månad, plattform och kategori, vinst per dag i lager och hur väl appens uppskattningar stämmer.
+- **Frakt:** under Dina regler väljer du förpackningskostnad och om du bjuder på frakten. Flippa vet vad frakten brukar kosta per varutyp.
+- **Vakt:** om nattens databaskörning inte har gått (GitHub tappar ibland schemalagda körningar) startar appen den när du öppnar den inloggad.
+
 ### Fotoflödet
 
 1. Du tar en bild i appen och skriver valfritt vad det är.

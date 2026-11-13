@@ -10,6 +10,8 @@ param(
 )
 . (Join-Path $PSScriptRoot 'lib.ps1')
 
+# Vid körning på datorn: hämta senaste sökord och katalog från grenen "data" först.
+if ($Push) { Push-Location $RepoRoot; try { git fetch -q origin data; $tf = Join-Path ([IO.Path]::GetTempPath()) 'tk-data.tar'; git archive -o $tf origin/data data/sokord.json data/thriftdata.json; tar -xf $tf -C $RepoRoot; Remove-Item $tf } finally { Pop-Location } }
 $termFile = Join-Path $DataDir 'sokord.json'
 $outFile  = Join-Path $DataDir 'thriftdata.json'
 $terms = @(Read-Json $termFile)
@@ -47,12 +49,17 @@ if ($fails.Count) { Write-Host "Fel ($($fails.Count)):" -ForegroundColor Yellow;
 if ($fails.Count -gt [math]::Max(4, $terms.Count)) { throw "För många fel - Blocket eller Tradera verkar blockera." }
 
 if ($Push) {
+  # Resultatet sparas på grenen "data" (inte main), via en tillfällig arbetskopia av den grenen.
   Push-Location $RepoRoot
+  $wt = Join-Path ([IO.Path]::GetTempPath()) ('tk-data-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
   try {
-    git pull --rebase --autostash
-    git add data
+    git fetch -q origin data
+    git worktree add -q $wt origin/data
+    Copy-Item -Force $outFile (Join-Path $wt 'data\thriftdata.json')
+    Set-Location $wt
+    git add -A
     git diff --cached --quiet
-    if ($LASTEXITCODE -ne 0) { git commit -m "Scrape $(Get-Date -Format 'yyyy-MM-dd HH:mm')"; git push }
+    if ($LASTEXITCODE -ne 0) { git commit -q -m "Scrape $(Get-Date -Format 'yyyy-MM-dd HH:mm') (dator)"; git push origin HEAD:data }
     else { Write-Host 'Inga ändringar att pusha.' }
-  } finally { Pop-Location }
+  } finally { Set-Location $RepoRoot; git worktree remove --force $wt 2>$null; Pop-Location }
 }

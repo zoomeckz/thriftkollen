@@ -208,5 +208,17 @@ function Write-Db([string]$path, $obj, [switch]$Fast) {
   $dir = Split-Path -Parent $path
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
   $plain = if ($Fast) { $obj } else { ConvertTo-Plain $obj }
-  [IO.File]::WriteAllText($path, $script:Ser.Serialize($plain), $script:Utf8)
+  try { $json = $script:Ser.Serialize($plain) }
+  catch {
+    if (-not $Fast) { throw }
+    # Ett PSObject har smugit sig in. Visa var, och spara ändå (långsammare väg).
+    $where = ''
+    if ($obj -is [System.Collections.IDictionary] -and $obj['rows']) {
+      foreach ($r in $obj['rows']) { for ($i = 0; $i -lt @($r).Count; $i++) { if ($r[$i] -is [System.Management.Automation.PSObject]) { $where = "kolumn $i ($(@($obj['cols'])[$i]))"; break } }; if ($where) { break } }
+      if (-not $where -and @($obj['rows'])[0] -is [System.Management.Automation.PSObject]) { $where = 'hela raden' }
+    }
+    Write-Host "   Varning: PSObject i $([IO.Path]::GetFileName($path)) $where, sparar med säkra vägen." -ForegroundColor Yellow
+    $json = $script:Ser.Serialize((ConvertTo-Plain $obj))
+  }
+  [IO.File]::WriteAllText($path, $json, $script:Utf8)
 }

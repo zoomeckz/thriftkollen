@@ -55,11 +55,22 @@ $Tz = [TimeZoneInfo]::FindSystemTimeZoneById('W. Europe Standard Time')
 $HistBands = @(0, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000)
 
 $script:Req = 0
+$script:Rsc = $true
+$script:Bytes = [int64]0
+# Hämtar sidans data. Med rubriken "RSC: 1" svarar Tradera med bara datadelen (ca 40 % mindre, 3-4 gånger snabbare).
+# Om det slutar fungera faller vi tillbaka på hela HTML-sidan och plockar ut datan därifrån.
 function Get-Payload([string]$url) {
   for ($try = 0; $try -lt 4; $try++) {
     try {
       $script:Req++
-      $h = Get-Text $url
+      if ($script:Rsc) {
+        $r = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 30 -Headers @{ 'User-Agent' = $script:UA; 'Accept-Language' = 'sv-SE,sv;q=0.9'; 'RSC' = '1' }
+        Start-Sleep -Milliseconds $DelayMs
+        $t = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()); $script:Bytes += $t.Length
+        if ("$($r.Headers['Content-Type'])" -like 'text/x-component*' -and $t.Contains('"totalItemCount"')) { return $t }
+        Write-Host '   RSC-svaret såg annorlunda ut, byter till hela sidor.' -ForegroundColor Yellow; $script:Rsc = $false
+      }
+      $h = Get-Text $url; $script:Bytes += $h.Length
       Start-Sleep -Milliseconds $DelayMs
       $sb = [Text.StringBuilder]::new()
       foreach ($m in [regex]::Matches($h, 'self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)')) { [void]$sb.Append($script:Ser.DeserializeObject('"' + $m.Groups[1].Value + '"')) }
@@ -193,5 +204,5 @@ foreach ($top in $tcats.categories) {
     Write-Db (Join-Path $OutDir "$($w.id)\sum\$sid.json") $sum
     Write-Host ("   {0} › {1}: {2} nya sålda, {3} totalt, {4} sidor{5}" -f $top.name, $s.name, $seenNew, $rows.Count, $page, $(if ($complete) { '' } else { ' (urval)' }))
   }
-  Write-Host ("   {0}: {1} anrop, {2:N0} s" -f $top.name, $script:Req, ((Get-Date) - $t0).TotalSeconds) -ForegroundColor Green
+  Write-Host ("   {0}: {1} anrop, {2:N0} s, {3:N1} MB{4}" -f $top.name, $script:Req, ((Get-Date) - $t0).TotalSeconds, ($script:Bytes / 1MB), $(if ($script:Rsc) { '' } else { ' (hela sidor)' })) -ForegroundColor Green; $script:Bytes = 0
 }

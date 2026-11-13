@@ -290,6 +290,8 @@ async function boot() {
   try { idx = await getJson('index.json'); } catch (e) { return fail('Kunde inte läsa databasen (' + esc(e.message) + ').'); }
   const big = (idx.watches || []).filter(w => w.mode === 'alla' || w.mode === 'tradera');
   if (!big.length) return fail(`Det finns ingen Hela Blocket- eller Tradera-bevakning än. Skapa en i appen under <a href="./#databas">Databas</a> → + Ny bevakning.`);
+  // Jämförelsen Blocket mot Tradera (kombo/, byggs varje natt av scripts/kombo.ps1)
+  if (big.some(w => w.mode === 'alla') && big.some(w => w.mode === 'tradera')) big.push({ id: 'kombo', mode: 'kombo', name: 'Blocket mot Tradera' });
   S.watches = big;
   const want = new URLSearchParams(location.search).get('w');
   await openSource(big.find(x => x.id === want) || big.find(x => x.mode === 'alla') || big[0], true);
@@ -298,6 +300,7 @@ async function openSource(w, first) {
   S.src = w; S.charts && Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
   if (!first) { S.cat = ''; S.sub = ''; $('#app').className = 'loading'; $('#app').innerHTML = '<div class="spinner"></div><div>Hämtar ' + esc(w.name) + '…</div>'; }
   drawSources();
+  if (w.mode === 'kombo') return openKombo(w);
   try { [S.ov, S.trend] = await Promise.all([getJson(`${w.id}/overview.json`), getJson(`${w.id}/trend.json`).catch(() => null)]); }
   catch (e) { S.ov = null; return fail(e.status === 404 ? 'Första körningen är inte klar än. Kom tillbaka om en stund.' : 'Kunde inte läsa översikten: ' + esc(e.message)); }
   if (S.sub && !subOf(S.sub)) S.sub = ''; if (S.sub) S.cat = subOf(S.sub).cat;
@@ -311,11 +314,12 @@ async function openSource(w, first) {
 }
 const isT = () => S.ov && S.ov.source === 'tradera';
 function drawSources() {
-  $('#sources').innerHTML = S.watches.map(w => `<button data-src="${esc(w.id)}" aria-pressed="${S.src && S.src.id === w.id}">${w.mode === 'tradera' ? 'Tradera' : 'Blocket'}<small>${esc(w.mode === 'tradera' ? 'sålda, hela Sverige' : (w.name.split('·')[1] || '').trim())}</small></button>`).join('');
+  $('#sources').innerHTML = S.watches.map(w => `<button data-src="${esc(w.id)}" aria-pressed="${S.src && S.src.id === w.id}">${w.mode === 'kombo' ? 'Jämför' : w.mode === 'tradera' ? 'Tradera' : 'Blocket'}<small>${esc(w.mode === 'kombo' ? 'Blocket mot Tradera' : w.mode === 'tradera' ? 'sålda, hela Sverige' : (w.name.split('·')[1] || '').trim())}</small></button>`).join('');
 }
 function fail(html) { $('#app').className = 'loading'; $('#app').innerHTML = `<div style="max-width:520px">${html}</div>`; $('#subtitle').textContent = ''; }
 
 function render(first) {
+  if (S.ov && S.ov.source === 'kombo') return renderK();
   if (isT()) return renderT(first);
   writeHash();
   Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
@@ -865,6 +869,127 @@ function drawTableT() {
     <p class="muted small" style="margin:8px 0 0">* urval: underkategorin säljer mer än databasen hämtar per natt.</p>`;
 }
 
+// =====================================================================
+// ---------- Jämför: samma varutyp på Blocket och Tradera ----------
+// =====================================================================
+// kombo/terms.json: en rad per varutyp (ord eller ordpar ur rubrikerna) med Blocket utropspris, Blocket sålda (försvunna)
+// och Tradera slutpris. Pålitlighet (conf) 3 = båda källorna finns och är överens om nivån.
+const fnv = s => { let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; };
+const K = { q: '', min: 10, sel: null, sortA: 'gap', shards: new Map(), lim: 30 };
+async function openKombo(w) {
+  try {
+    const [t, f] = await Promise.all([getJson('kombo/terms.json'), getJson('kombo/flip.json').catch(() => null)]);
+    const rows = t.rows.map(r => { const o = {}; t.cols.forEach((c, i) => o[c] = r[i]); return o; });
+    S.ov = { source: 'kombo', name: 'Blocket mot Tradera', updatedAt: t.updatedAt, day: t.day, terms: rows, askToSold: f && f.askToSold, deals: f ? f.deals.length : 0, total: f && f.total };
+    S.trend = null;
+  } catch (e) { S.ov = null; return fail('Den gemensamma databasen är inte byggd än (' + esc(e.message) + '). Den byggs i nattens körning.'); }
+  $('#title').textContent = 'Blocket mot Tradera';
+  $('#subtitle').textContent = `${fmt(S.ov.terms.length)} varutyper ur rubrikerna · uppdaterad ${new Date(S.ov.updatedAt).toLocaleString('sv-SE', { dateStyle: 'medium', timeStyle: 'short' })}`;
+  history.replaceState(null, '', '?w=kombo');
+  render(true);
+}
+// Tradera-avgift (10 %, min 3, max 200 kr) dras av när vi räknar vad du får ut.
+const traderaNet = p => p - Math.min(200, Math.max(3, p * 0.1));
+function kRows() {
+  const qn = K.q.toLowerCase();
+  return S.ov.terms.filter(t => t.conf >= 2 && t.tN >= K.min && t.bN >= K.min && t.b50 > 0 && t.t50 > 0 && (!qn || t.k.includes(qn)));
+}
+function renderK() {
+  Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
+  const all = kRows(), both = all.filter(t => t.conf === 3);
+  const ratios = both.map(t => t.t50 / t.b50).sort((a, b) => a - b), mid = ratios.length ? ratios[Math.floor(ratios.length / 2)] : null;
+  // Köp billigt på Blocket, sälj på Tradera: billigaste fjärdedelen på Blocket mot den försiktiga gränsen för Tradera-slutpriset.
+  const arb = both.filter(t => t.tL > 0 && t.b25 > 0).map(t => ({ t, gap: traderaNet(t.tL) - t.b25, x: t.tL / t.b25 })).filter(o => o.gap > 0);
+  arb.sort((a, b) => K.sortA === 'x' ? b.x - a.x : K.sortA === 'vol' ? b.t.tW - a.t.tW : b.gap - a.gap);
+  // Säljs dyrare på Blocket än på Tradera (sålda på båda)
+  const blk = all.filter(t => t.gN >= K.min && t.g50 > 0 && t.t50 > 0 && t.g50 > t.t50 * 1.15).map(t => ({ t, x: t.g50 / t.t50 })).sort((a, b) => b.x - a.x);
+  const app = $('#app'); app.className = 'dash';
+  let i = 0; const I = () => `style="--i:${i++}"`;
+  app.innerHTML = `
+  <div class="filters" style="grid-column:span 12">
+    <div class="field"><label for="k-q">Varutyp</label><input id="k-q" type="search" value="${esc(K.q)}" placeholder="t.ex. lego, sonos, babolat" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:240px"></div>
+    <div class="field"><span class="lbl">Minst antal per källa</span><div class="seg" role="group">${[5, 10, 25, 50].map(v => `<button data-kmin="${v}" aria-pressed="${K.min === v}">${v}</button>`).join('')}</div></div>
+  </div>
+  <div class="note anim" ${I()}>Samma sorts vara jämförs på båda ställena: <b>utropspris</b> på Blocket (privatpersoner i Stockholm) mot <b>slutpris</b> på Tradera (hela Sverige, senaste 30 dagarna). En varutyp är ett ord eller ordpar ur rubrikerna, så kolla alltid modell och skick.</div>
+  <div class="kpis">
+    <div class="kpi hero anim" ${I()}><span class="lbl">Varutyper med båda källorna</span><b data-count="${both.length}"></b><span>av ${fmt(all.length)} med tillräckligt mycket data</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Slutpris mot utropspris</span><b>${mid ? Math.round(mid * 100) + ' %' : '–'}</b><span>Tradera-slutpris som andel av Blocket-utropet (median)</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Köp på Blocket, sälj på Tradera</span><b data-count="${arb.length}"></b><span>varutyper där billiga Blocket-annonser ligger under säkert Tradera-pris</span></div>
+    <div class="kpi anim" ${I()}><span class="lbl">Säljs bättre på Blocket</span><b data-count="${blk.length}"></b><span>sålda dyrare på Blocket än på Tradera</span></div>
+  </div>
+  <section class="card s8 anim" ${I()}>
+    <div class="card-head"><div><h2>Utropspris på Blocket mot slutpris på Tradera</h2><div class="hint">Varje prick är en varutyp. Över linjen säljs den dyrare på Tradera än den begärs på Blocket. Klicka på en prick.</div></div>
+      <div class="legend"><span><i style="background:#3987e5"></i>Båda källorna överens</span><span><i style="background:rgba(152,162,175,.6)"></i>Bara Blocket-sålda</span></div></div>
+    <div class="chart-box tall"><canvas id="c-k"></canvas></div>
+  </section>
+  <section class="card s4 anim" ${I()} id="k-detail">${kDetail()}</section>
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Köp på Blocket, sälj på Tradera</h2><div class="hint">Billigaste fjärdedelen på Blocket mot priset som minst hälften av Tradera-försäljningarna nådde (90 % säkert), efter Tradera-avgiften.</div></div>
+      <div class="seg" role="group" aria-label="Sortera">${[['gap', 'Störst vinst'], ['x', 'Högst multipel'], ['vol', 'Mest sålt']].map(([v, l]) => `<button data-ksort="${v}" aria-pressed="${K.sortA === v}">${l}</button>`).join('')}</div></div>
+    <div class="table-wrap">${arb.length ? `<table class="table"><thead><tr><th>Varutyp</th><th class="r">Blocket billig</th><th class="r">Blocket median</th><th class="r">Tradera slutpris</th><th class="r">Säkert pris</th><th class="r">Du får ut</th><th class="r">Vinst</th><th class="r">x</th><th class="r">Sålda/v</th><th class="r">Ute</th></tr></thead><tbody>
+      ${arb.slice(0, K.lim).map(({ t, gap, x }) => `<tr data-kpick="${esc(t.k)}" class="${K.sel === t.k ? 'sel' : ''}"><td style="text-transform:capitalize">${esc(t.k)}</td><td class="r">${kr(t.b25)}</td><td class="r">${kr(t.b50)}</td><td class="r">${kr(t.t50)}</td><td class="r">${kr(t.tL)}</td><td class="r">${kr(traderaNet(t.tL))}</td><td class="r" style="color:#4CC583">+${kr(gap)}</td><td class="r">${x.toFixed(1)}</td><td class="r">${t.tW}</td><td class="r">${t.bN}</td></tr>`).join('')}</tbody></table>
+      ${arb.length > K.lim ? `<button class="btn" data-kmore="1" style="margin-top:10px">Visa fler (${arb.length - K.lim})</button>` : ''}` : '<p class="muted small">Inga varutyper med de här filtren.</p>'}</div>
+  </section>
+  <section class="card anim" ${I()}>
+    <div class="card-head"><div><h2>Säljs bättre på Blocket</h2><div class="hint">Försvunna Blocket-annonser (sålda eller borttagna) har högre median än Tradera-slutpriset. Lägg ut de här på Blocket.</div></div></div>
+    <div class="table-wrap">${blk.length ? `<table class="table"><thead><tr><th>Varutyp</th><th class="r">Blocket sålda</th><th class="r">Tradera slutpris</th><th class="r">Skillnad</th><th class="r">Säljtid Blocket</th><th class="r">Antal</th></tr></thead><tbody>
+      ${blk.slice(0, 20).map(({ t, x }) => `<tr data-kpick="${esc(t.k)}"><td style="text-transform:capitalize">${esc(t.k)}</td><td class="r">${kr(t.g50)}</td><td class="r">${kr(t.t50)}</td><td class="r">+${Math.round((x - 1) * 100)} %</td><td class="r">${t.s50 != null ? t.s50 + ' d' : '–'}</td><td class="r">${t.gN} / ${t.tN}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted small">Kräver försvunna Blocket-annonser, som räknas från andra natten.</p>'}</div>
+  </section>`;
+  app.querySelectorAll('[data-count]').forEach(el => countUp(el, +el.dataset.count));
+  // Spridningsdiagram, log-log, med y = x som referens
+  const pts = all.map(t => ({ x: t.b50, y: t.t50, r: 3 + Math.min(10, Math.sqrt(t.tN + t.bN) / 3), t }));
+  const lo = Math.max(10, Math.min(...pts.map(p => Math.min(p.x, p.y)))), hi = Math.max(...pts.map(p => Math.max(p.x, p.y)));
+  S.charts.k = new Chart($('#c-k'), { type: 'bubble', data: { datasets: [
+      { type: 'line', data: [{ x: lo, y: lo }, { x: hi, y: hi }], borderColor: '#383835', borderWidth: 1.5, pointRadius: 0, order: 2 },
+      { data: pts, order: 1, backgroundColor: pts.map(p => p.t.k === K.sel ? '#F2C52E' : p.t.conf === 3 ? 'rgba(57,135,229,.6)' : 'rgba(152,162,175,.35)'),
+        borderColor: pts.map(p => p.t.k === K.sel ? '#F2C52E' : p.t.conf === 3 ? '#9ec5f4' : 'rgba(152,162,175,.5)'), borderWidth: 1, hoverBorderColor: '#E8ECF1' }] },
+    options: { maintainAspectRatio: false, animation: { duration: REDUCED ? 0 : 900 },
+      scales: { x: axis({ type: 'logarithmic', min: lo * 0.8, max: hi * 1.2, title: { display: true, text: 'Blocket utropspris, median (kr)' }, ticks: { callback: v => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].includes(v) ? short(v) : '' } }),
+        y: axis({ type: 'logarithmic', min: lo * 0.8, max: hi * 1.2, title: { display: true, text: 'Tradera slutpris, median (kr)' }, ticks: { callback: v => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].includes(v) ? short(v) : '' } }) },
+      onClick: (e, els) => { const el = els.find(x => x.datasetIndex === 1); if (el) { K.sel = pts[el.index].t.k; render(); } },
+      onHover: (e, els) => { e.native.target.style.cursor = els.some(x => x.datasetIndex === 1) ? 'pointer' : 'default'; },
+      plugins: { tooltip: { filter: c => c.datasetIndex === 1, displayColors: false, callbacks: { title: c => c[0].raw.t.k, label: c => { const t = c.raw.t; return [`Blocket utrop ${kr(t.b50)} (${t.bN} ute)`, `Tradera slutpris ${kr(t.t50)} (${t.tN} sålda)`, `Slutpris / utrop: ${Math.round(t.t50 / t.b50 * 100)} %`]; } } } } } });
+  if (K.sel) loadKTrend(K.sel);
+}
+function kDetail() {
+  const t = K.sel && S.ov.terms.find(x => x.k === K.sel);
+  if (!t) return `<div class="card-head"><h2>Välj en varutyp</h2></div><p class="muted small">Klicka på en prick eller en rad för att se priserna på båda ställena och hur de har utvecklats.</p>`;
+  const sh = K.shards.get(String(fnv(t.k) % 32).padStart(2, '0')), series = sh && sh.terms && sh.terms[t.k];
+  const e = encodeURIComponent(t.k);
+  return `<div class="card-head"><div><div class="lbl">Varutyp</div><h2 style="text-transform:capitalize">${esc(t.k)}</h2></div></div>
+    <div class="meters">
+      ${[['Blocket, ute nu (utrop)', t.b50, `${t.bN} st · ${kr(t.b25)}–${kr(t.b75)}`], ['Blocket, sålda 30 d', t.g50, t.gN ? `${t.gN} st${t.s50 != null ? ' · säljtid ' + t.s50 + ' d' : ''}` : 'inga än'], ['Tradera, sålda 30 d', t.t50, t.tN ? `${t.tN} st · ${kr(t.t25)}–${kr(t.t75)} · ${t.tW}/v` : 'inga']]
+        .map(([l, v, s]) => `<div class="meter"><div class="top"><span>${l}</span><b>${kr(v || null)}</b></div><div class="muted small">${s}</div></div>`).join('')}
+      <div class="meter"><div class="top"><span>Rättvist pris</span><b style="color:#F2C52E">${kr(t.fair || null)}</b></div><div class="muted small">${t.ship ? 'Frakt på Tradera brukar vara ~' + kr(t.ship) : ''}</div></div>
+    </div>
+    <div class="chart-box" style="height:200px">${series && series.length > 1 ? '<canvas id="c-kt"></canvas>' : `<div class="empty-chart">${series ? 'Trenden fylls på varje natt.' : 'Laddar trend…'}</div>`}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" target="_blank" rel="noopener" href="https://www.blocket.se/recommerce/forsale/search?q=${e}">Blocket ↗</a><a class="btn" target="_blank" rel="noopener" href="https://www.tradera.com/search?q=${e}&itemStatus=Ended">Sålda på Tradera ↗</a></div>`;
+}
+async function loadKTrend(k) {
+  const n = String(fnv(k) % 32).padStart(2, '0');
+  if (!K.shards.has(n)) { K.shards.set(n, null); try { K.shards.set(n, await getJson(`kombo/trend/${n}.json`)); } catch { K.shards.set(n, { terms: {} }); } }
+  if (K.sel !== k) return;
+  $('#k-detail').innerHTML = kDetail();
+  const sh = K.shards.get(n), s = sh && sh.terms && sh.terms[k];
+  if (S.charts.kt) { S.charts.kt.destroy(); delete S.charts.kt; }
+  if (s && s.length > 1 && $('#c-kt')) {
+    const lab = s.map(r => dFmt.format(dayDate(r[0])));
+    S.charts.kt = new Chart($('#c-kt'), { type: 'line', data: { labels: lab, datasets: [
+        { label: 'Blocket utrop', data: s.map(r => r[2] || null), borderColor: '#3987e5', borderWidth: 2, pointRadius: 0, tension: .3 },
+        { label: 'Tradera slutpris', data: s.map(r => r[6] || null), borderColor: '#d95926', borderWidth: 2, pointRadius: 0, tension: .3 }] },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: true, labels: { boxWidth: 10 } } }, scales: { x: axis({ grid: { display: false } }), y: axis({ ticks: { callback: v => kr(v) } }) } } });
+  }
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-kmin],[data-ksort],[data-kpick],[data-kmore]'); if (!t) return;
+  if (t.dataset.kmin) { K.min = +t.dataset.kmin; render(); }
+  if (t.dataset.ksort) { K.sortA = t.dataset.ksort; render(); }
+  if (t.dataset.kmore) { K.lim += 30; render(); }
+  if (t.dataset.kpick) { K.sel = t.dataset.kpick; render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); }
+});
+let kTimer; document.addEventListener('input', e => { if (e.target.id === 'k-q') { clearTimeout(kTimer); kTimer = setTimeout(() => { K.q = e.target.value.trim(); K.lim = 30; render(); const el = $('#k-q'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 300); } });
+
 // ---------- händelser ----------
 document.addEventListener('change', async e => {
   const t = e.target;
@@ -882,7 +1007,7 @@ document.addEventListener('click', e => {
   if (t.dataset.pick) { const s = subOf(t.dataset.pick); S.cat = s.cat; S.sub = s.sub; render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); return; }
   if (t.dataset.go != null) { S.cat = t.dataset.go; S.sub = ''; render(); }
 });
-let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.ov) { if (isT()) drawTreeT(); else { drawTree(); drawMap(subsIn()); } } }, 200); });
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.ov && S.ov.source !== 'kombo') { if (isT()) drawTreeT(); else { drawTree(); drawMap(subsIn()); } } }, 200); });
 addEventListener('hashchange', () => { if (!S.ov) return; const c = S.cat, s = S.sub, p = S.period; readHash(); if (c !== S.cat || s !== S.sub || p !== S.period) render(); });
 if (!window.Chart) fail('Kunde inte ladda diagrambiblioteket. Kolla internetanslutningen.'); else boot();
 </script>

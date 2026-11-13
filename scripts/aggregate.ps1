@@ -121,7 +121,15 @@ foreach ($w in $watches | Where-Object { $_.mode -eq 'tradera' }) {
     totals = $tot; wdhr = $wdhr; endDays = $endDays; types = $types; histBands = $sums[0]['histBands']; hist = $hist; hourPrice = $hourPrice
     cats = @($tcats.categories | ForEach-Object { [ordered]@{ value = [string]$_.id; name = $_.name } })
     top = $top; wars = $wars
-    subs = @($sums | ForEach-Object { $s = $_; $o = [ordered]@{}; foreach ($k in $s.Keys) { $o[$k] = $s[$k] }; $o['sub'] = [string]$s['sub']; $o['cat'] = [string]$s['cat']; $o })
+    # Per underkategori räcker 3 toppförsäljningar och 3 budkrig med korta rubriker (helheten har 40 av varje).
+    # Det halverar filen, som laddas varje gång statistiksidan öppnas.
+    subs = @($sums | ForEach-Object { $s = $_; $o = [ordered]@{}
+        foreach ($k in $s.Keys) {
+          if ($k -eq 'histBands') { continue }
+          if ($k -eq 'top' -or $k -eq 'wars') { $o[$k] = @(@($s[$k]) | Select-Object -First 3 | ForEach-Object { $r = @($_); $t = [string]$r[1]; if ($t.Length -gt 70) { $r[1] = $t.Substring(0, 70) }; , $r }); continue }
+          $o[$k] = $s[$k]
+        }
+        $o['sub'] = [string]$s['sub']; $o['cat'] = [string]$s['cat']; $o })
   }
   Write-Db (Join-Path $dir 'overview.json') $overview
 

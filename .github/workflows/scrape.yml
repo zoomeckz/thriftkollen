@@ -1,20 +1,19 @@
 name: Scrape
 
+# Data som ändras ofta (data/thriftdata.json, data/fynd.json, data/sokord.json, queue/ och uploads/) ligger på grenen
+# "data", så att varje foto och scrape inte bygger om hela sidan. Skripten hämtas från main.
+
 on:
-  # Ett nytt foto från appen hamnar i queue/ och startar en körning direkt.
-  push:
-    paths:
-      - 'queue/**'
-  # Knappen "Kör full scrape" i appen, eller Actions-fliken på GitHub.
+  # Appen startar en körning direkt när du skickar foton (full = false), och knappen "Kör full scrape" (full = true).
   workflow_dispatch:
     inputs:
       full:
         description: 'Kör full scrape av alla sökord'
         type: boolean
         default: true
-  # Full scrape varje måndag och torsdag kl 06 svensk tid.
+  # Full scrape varje måndag och torsdag kl 06 svensk tid. Udda minut: GitHub tappar ofta körningar på jämna klockslag.
   schedule:
-    - cron: '0 5 * * 1,4'
+    - cron: '23 4 * * 1,4'
 
 permissions:
   contents: write
@@ -30,6 +29,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: _data
+
+      - name: Hämta data från grenen data
+        shell: powershell
+        run: |
+          foreach ($f in 'thriftdata.json', 'fynd.json', 'sokord.json') { if (Test-Path "_data\data\$f") { Copy-Item -Force "_data\data\$f" data\ } }
+          foreach ($d in 'queue', 'uploads') { New-Item -ItemType Directory -Force $d | Out-Null; if (Test-Path "_data\$d") { Copy-Item -Recurse -Force "_data\$d\*" $d\ } }
+
       - name: Identifiera och scrapa nya foton
         shell: powershell
         env:
@@ -41,18 +51,23 @@ jobs:
         shell: powershell
         run: .\scripts\scrape.ps1
 
-      - name: Spara resultatet i repot
+      - name: Spara resultatet på grenen data
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Continue'
+          foreach ($f in 'thriftdata.json', 'fynd.json', 'sokord.json') { Copy-Item -Force "data\$f" "_data\data\$f" }
+          # Behandlade foton är borttagna ur queue/ här, ta bort dem på datagrenen också.
+          Get-ChildItem "_data\queue" -Filter *.json -ErrorAction SilentlyContinue | Where-Object { -not (Test-Path "queue\$($_.Name)") } | Remove-Item -Force
+          Set-Location _data
           git config user.name "thriftkollen-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A data queue
+          git add -A
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
             git commit -m "Data $(Get-Date -Format 'yyyy-MM-dd HH:mm') ($env:GITHUB_EVENT_NAME)"
-            for ($i = 0; $i -lt 3; $i++) {
-              git pull --rebase
-              git push
+            for ($i = 0; $i -lt 4; $i++) {
+              git pull --rebase origin data
+              git push origin HEAD:data
               if ($LASTEXITCODE -eq 0) { break }
               Start-Sleep -Seconds 5
             }
