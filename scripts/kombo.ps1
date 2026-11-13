@@ -108,15 +108,16 @@ public static class Kombo {
 
   // Nedre 90 %-gräns för medianen, utan antaganden om fördelningen (ordningsstatistika + binomialfördelning).
   // Med n sålda är minst hälften av alla försäljningar >= X(k) med 90 % säkerhet. Kräver minst 10 sålda.
+  // r = största rangen (1-baserad) där P(Bin(n, 0,5) <= r - 1) <= alpha. Då gäller P(X(r) <= median) >= 1 - alpha.
   public static int LcbMedian(List<int> s, double alpha) {
     int n = s.Count; if (n < 10) return 0;
-    int k;
-    if (n > 200) k = (int)Math.Floor(n / 2.0 - 1.2816 * Math.Sqrt(n) / 2.0);
+    int r;
+    if (n > 200) r = (int)Math.Floor(n / 2.0 - 1.2816 * Math.Sqrt(n) / 2.0);   // normalapproximation, avrundad nedåt (försiktig)
     else {
-      double pmf = Math.Pow(0.5, n), cdf = 0; k = 0;
-      for (int j = 0; j < n; j++) { cdf += pmf; if (cdf > alpha) break; k = j + 1; pmf = pmf * (n - j) / (j + 1); }
+      double pmf = Math.Pow(0.5, n), cdf = 0; r = 0;
+      for (int j = 0; j < n; j++) { cdf += pmf; if (cdf > alpha) break; r = j + 1; pmf = pmf * (n - j) / (j + 1); }
     }
-    return s[Math.Max(0, Math.Min(n - 1, k))];
+    return s[Math.Max(0, Math.Min(n - 1, r - 1))];   // rang r -> index r - 1
   }
 
   static int Q(List<int> s, double q) { return s.Count == 0 ? 0 : s[(int)Math.Floor((s.Count - 1) * q)]; }
@@ -159,7 +160,7 @@ public static class Kombo {
     }
   }
 
-  // Samma värdering som appen (standardinställningarna): snitt av Tradera-median och Blocket-pris minus 20 % prutmån.
+  // Säljvärde = rättvist pris. Tradera-avgift (10 %, minst 3, högst 200 kr) dras när priset bygger på Tradera.
   static double Resale(KTerm t, out double fee) {
     fee = (t.Src & 1) != 0 ? Math.Min(200, Math.Max(3, t.Fair * 0.10)) : 0;
     return t.Fair;
