@@ -5,6 +5,10 @@ Appen visar vad som lönar sig att plocka med sig och hur mycket du högst kan b
 
 **Appen:** öppnas via GitHub Pages för det här repot. Lägg den på mobilens hemskärm.
 
+> **Automatiska körningar är avstängda (15 nov 2026).** Inga scheman körs: varken prisscrapen, nattens databas eller
+> Black Week-skannern. Starta dem manuellt under Actions → Run workflow, eller med knapparna i appen.
+> Bildigenkänningen (Claude API) körs bara när du själv skickar ett foto.
+
 ## Så hänger det ihop
 
 | Del | Var | Vad den gör |

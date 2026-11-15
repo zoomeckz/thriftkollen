@@ -11,9 +11,7 @@ on:
         description: 'Kör full scrape av alla sökord'
         type: boolean
         default: true
-  # Full scrape varje måndag och torsdag kl 06 svensk tid. Udda minut: GitHub tappar ofta körningar på jämna klockslag.
-  schedule:
-    - cron: '23 4 * * 1,4'
+  # Automatiska körningar avstängda 2026-11-15 (inga scheman). Starta manuellt: Actions → Run workflow.
 
 permissions:
   contents: write

@@ -6,8 +6,7 @@ name: Black Week
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '7 6,15 * * *'
+  # Automatiska körningar avstängda 2026-11-15 (inga scheman). Starta manuellt: Actions → Run workflow.
 
 permissions:
   contents: write
