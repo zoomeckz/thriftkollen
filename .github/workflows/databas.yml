@@ -13,7 +13,6 @@ on:
         description: 'Id på bevakningen, "alla" eller "nya"'
         type: string
         default: 'alla'
-  # Varje natt ca kl 03:20 svensk tid. Udda minut: GitHub tappar ofta schemalagda körningar på jämna klockslag.
   # Automatiska körningar avstängda 2026-11-15 (inga scheman). Starta manuellt: Actions → Run workflow.
 
 permissions:
